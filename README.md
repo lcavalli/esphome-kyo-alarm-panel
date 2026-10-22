@@ -14,10 +14,13 @@ following the design and directions of the author.
 
 ## Architecture
 
-- `KyoAlarmComponent` (hub) owns the UART link. Requests go through a non-blocking queue processed in
-  `loop()`; status is polled every `update_interval`.
-- Entities register with the hub as `KyoAlarmListener`s and receive every status update. Entities that act
-  on the panel (alarm control panel, bypass switches, reset button) do it through the hub.
+- `KyoAlarmComponent` (hub, `kyo_alarm:`) owns the UART link. Requests go through a non-blocking queue
+  processed in `loop()`; status is polled every `update_interval`.
+- Entities are declared with the `kyo_alarm` platform of each entity domain (`alarm_control_panel`,
+  `binary_sensor`, `switch`, `button`, `text_sensor`), as in ESPHome core hub components. They register with
+  the hub as `KyoAlarmListener`s and receive every status update; those that act on the panel (alarm control
+  panel, bypass switches, reset button) do it through the hub. Each platform's code lives in its own
+  directory and is only compiled when the platform is used.
 - `kyo_protocol.*` holds the frame encoding, independent of ESPHome.
 
 ## Configuration
@@ -31,14 +34,16 @@ uart:
   parity: EVEN
 
 external_components:
-  - source: github://lcavalli/kyo-alarm-external-component
+  - source: github://lcavalli/esphome-kyo-alarm-panel
     components: [kyo_alarm]
 
 kyo_alarm:
+  id: kyo
   model: KYO32G
   time_id: ha_time            # optional, keeps the panel clock in sync
 
-  alarm_control_panel:
+alarm_control_panel:
+  - platform: kyo_alarm
     name: "Alarm"
     partitions:
       away: [1, 2, 3, 4]      # default: all partitions
@@ -48,38 +53,87 @@ kyo_alarm:
     requires_code: true       # codes are checked against the PINs stored in the panel
     requires_code_to_arm: true
 
-  zones:
-    - zone: 1
-      name: "Front door"
-      device_class: door
-      alarm_memory: true      # binary sensor "Front door alarm memory"
-      tamper: true            # binary sensor "Front door tamper"
-      tamper_memory: true     # binary sensor "Front door tamper memory"
-      bypass: true            # switch "Front door bypass", on when the zone is excluded
-    - zone: 2
-      name: "Dining room"
-      device_class: motion
-      bypass:
-        name: "Dining room excluded"
+binary_sensor:
+  - platform: kyo_alarm
+    communication:
+      name: "Communication"
+    low_battery:
+      name: "Low battery"
+    zones:
+      - zone: 1
+        open:
+          name: "Front door"
+          device_class: door
+        alarm_memory:
+          name: "Front door alarm memory"
+        tamper:
+          name: "Front door tamper"
+        tamper_memory:
+          name: "Front door tamper memory"
+      - zone: 2
+        open:
+          name: "Dining room"
+          device_class: motion
+
+switch:
+  - platform: kyo_alarm
+    zones:
+      - zone: 1
+        bypass:
+          name: "Front door bypass"   # on when the zone is excluded
+
+button:
+  - platform: kyo_alarm
+    reset_memory:
+      name: "Reset alarm memory"
+
+text_sensor:
+  - platform: kyo_alarm
+    panel_model:
+      name: "Panel model"
+    firmware_version:
+      name: "Firmware version"
 ```
 
-Every optional entity accepts `true` (entity with a default name) or the full entity schema
-(`name`, `icon`, `internal`, filters, ...).
+Every entity accepts the full schema of its domain (`name`, `icon`, `internal`, filters, ...). With more than
+one `kyo_alarm` hub, set `kyo_alarm_id` on each platform.
 
-### Hub options
+### Hub
 
 | Key | Description |
 | --- | --- |
 | `model` | Panel model, currently `KYO32G`. |
 | `update_interval` | Status polling interval, default `1s`. |
 | `time_id` | Time source used to set the panel clock on every time sync. |
-| `alarm_control_panel` | The panel entity. Arming modes without partitions are not offered. |
-| `panel_model`, `firmware_version` | Diagnostic text sensors. |
-| `communication` | Connectivity binary sensor, off after 3 failed requests. |
-| `reset_memory` | Button that resets alarm and tamper memories. |
-| `warnings` | `mains_failure`, `bpi_missing`, `fuse_fault`, `low_battery`, `phone_line_fault`, `default_codes`, `wireless_fault`. |
-| `tampers` | `zone`, `false_key`, `bpi`, `system`, `rf_jam`, `wireless`. |
-| `zones` | List of zones, see above. |
+
+### Platforms
+
+| Platform | Keys |
+| --- | --- |
+| `alarm_control_panel` | The panel entity, with `partitions` (`away`, `home`, `night`, `vacation`), `requires_code` and `requires_code_to_arm`. Arming modes without partitions are not offered. |
+| `binary_sensor` | `communication` (off after 3 failed requests); warnings `mains_failure`, `bpi_missing`, `fuse_fault`, `low_battery`, `phone_line_fault`, `default_codes`, `wireless_fault`; tampers `tamper_zone`, `tamper_false_key`, `tamper_bpi`, `tamper_system`, `tamper_rf_jam`, `tamper_wireless`; `zones`, a list of `zone` with `open`, `tamper`, `alarm_memory`, `tamper_memory`. |
+| `switch` | `zones`, a list of `zone` with `bypass`. |
+| `button` | `reset_memory`, resets alarm and tamper memories. |
+| `text_sensor` | `panel_model`, `firmware_version`. |
+
+### Migrating from the nested configuration
+
+Entities used to be declared under `kyo_alarm:`; the old keys are now rejected with a message naming the
+platform they moved to.
+
+| Before (under `kyo_alarm:`) | Now |
+| --- | --- |
+| `alarm_control_panel:` | `alarm_control_panel:` → `platform: kyo_alarm` |
+| `panel_model`, `firmware_version` | `text_sensor:` → `platform: kyo_alarm` |
+| `communication`, `warnings: {<flag>}` | `binary_sensor:` → `platform: kyo_alarm`, `<flag>` at the top level |
+| `tampers: {<flag>}` | `binary_sensor:` → `platform: kyo_alarm`, `tamper_<flag>` |
+| `zones:` with `name`/`device_class` | `binary_sensor:` → `zones:` → `open:` |
+| `zones:` → `alarm_memory`, `tamper`, `tamper_memory` | `binary_sensor:` → `zones:` |
+| `zones:` → `bypass` | `switch:` → `zones:` → `bypass:` |
+| `reset_memory` | `button:` → `platform: kyo_alarm` |
+
+The `true` shorthand is gone: each entity needs a `name`, which was previously derived from the zone name
+(e.g. "Front door alarm memory").
 
 ### Alarm control panel states
 

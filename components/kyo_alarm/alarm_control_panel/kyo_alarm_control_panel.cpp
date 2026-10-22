@@ -1,46 +1,12 @@
-#include "kyo_entities.h"
+#include "kyo_alarm_control_panel.h"
 
+#include "esphome/core/hal.h"
 #include "esphome/core/log.h"
 
 namespace esphome::kyo_alarm {
 
-static const char *const TAG = "kyo_alarm";
+static const char *const TAG = "kyo_alarm.alarm_control_panel";
 
-#ifdef USE_BINARY_SENSOR
-void KyoStatusBinarySensor::on_status_update(const KyoAlarmStatus &status) {
-  auto value = status.get(this->field_);
-  if (value.has_value())
-    this->publish_state((*value >> this->bit_) & 1);
-}
-
-void KyoStatusBinarySensor::dump_config() { LOG_BINARY_SENSOR("  ", "Binary sensor", this); }
-#endif
-
-#ifdef USE_SWITCH
-void KyoZoneBypassSwitch::on_status_update(const KyoAlarmStatus &status) {
-  auto value = status.get(StatusField::ZONE_BYPASS);
-  if (value.has_value())
-    this->publish_state((*value >> this->zone_) & 1);
-}
-
-void KyoZoneBypassSwitch::write_state(bool state) {
-  // The state is published once the panel reports it
-  this->parent_->set_zone_bypass(this->zone_, state);
-}
-
-void KyoZoneBypassSwitch::dump_config() {
-  LOG_SWITCH("  ", "Bypass switch", this);
-  ESP_LOGCONFIG(TAG, "    Zone: %u", this->zone_ + 1);
-}
-#endif
-
-#ifdef USE_BUTTON
-void KyoResetMemoryButton::press_action() { this->parent_->reset_memory(); }
-
-void KyoResetMemoryButton::dump_config() { LOG_BUTTON("  ", "Reset memory button", this); }
-#endif
-
-#ifdef USE_ALARM_CONTROL_PANEL
 using namespace alarm_control_panel;
 
 /// Maximum time the transitional state is held while waiting for the panel to report the target state
@@ -175,6 +141,5 @@ void KyoAlarmControlPanel::dump_config() {
                 this->get_name().c_str(), this->away_partitions_, this->home_partitions_, this->night_partitions_,
                 this->vacation_partitions_, YESNO(this->get_requires_code()), YESNO(this->get_requires_code_to_arm()));
 }
-#endif
 
 }  // namespace esphome::kyo_alarm
