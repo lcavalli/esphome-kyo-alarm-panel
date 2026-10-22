@@ -1,6 +1,11 @@
 # Gitignore settings for ESPHome
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
 .esphome/
 .ruff_cache/
 .vscode/
 secrets.yaml
-
