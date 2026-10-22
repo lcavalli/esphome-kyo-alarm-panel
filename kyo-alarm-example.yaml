@@ -1,0 +1,80 @@
+esphome:
+  name: kyo-alarm-example
+
+esp8266:
+  board: d1_mini
+
+# Disable logging on the serial port
+logger:
+  baud_rate: 0
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+time:
+  - platform: homeassistant
+    id: ha_time
+
+uart:
+  tx_pin: GPIO5
+  rx_pin: GPIO4
+  baud_rate: 9600
+  data_bits: 8
+  parity: EVEN
+
+external_components:
+  - source: components
+
+kyo_alarm:
+  id: kyo
+  model: KYO32G
+  # Keep the panel clock in sync
+  time_id: ha_time
+
+  alarm_control_panel:
+    name: "Alarm"
+    # Partitions armed by each mode, as a list or a bitmask (bit 0 is partition 1)
+    partitions:
+      away: [1, 2, 3, 4]  # IIII
+      home: [1, 4]        # IDDI
+      night: 0x0d         # IDII
+    # Codes are checked against the user PINs stored in the panel
+    requires_code: true
+    requires_code_to_arm: true
+
+  # Diagnostics
+  panel_model: true
+  firmware_version: true
+  communication: true
+  reset_memory: true
+  warnings:
+    mains_failure: true
+    low_battery: true
+    phone_line_fault:
+      name: "Phone line"
+  tampers:
+    zone: true
+    system: true
+
+  zones:
+    - zone: 1
+      name: "Front door"
+      device_class: door
+      alarm_memory: true
+      tamper: true
+      bypass: true
+    - zone: 2
+      name: "Dining room"
+      device_class: motion
+      alarm_memory: true
+      bypass:
+        name: "Dining room excluded"
