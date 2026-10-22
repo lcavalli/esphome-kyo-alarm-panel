@@ -40,7 +40,8 @@ kyo_alarm:
   # Keep the panel clock in sync
   time_id: ha_time
 
-  alarm_control_panel:
+alarm_control_panel:
+  - platform: kyo_alarm
     name: "Alarm"
     # Partitions armed by each mode, as a list or a bitmask (bit 0 is partition 1)
     partitions:
@@ -51,30 +52,55 @@ kyo_alarm:
     requires_code: true
     requires_code_to_arm: true
 
-  # Diagnostics
-  panel_model: true
-  firmware_version: true
-  communication: true
-  reset_memory: true
-  warnings:
-    mains_failure: true
-    low_battery: true
+binary_sensor:
+  - platform: kyo_alarm
+    # Diagnostics
+    communication:
+      name: "Communication"
+    mains_failure:
+      name: "Mains failure"
+    low_battery:
+      name: "Low battery"
     phone_line_fault:
       name: "Phone line"
-  tampers:
-    zone: true
-    system: true
+    tamper_zone:
+      name: "Zone tamper"
+    tamper_system:
+      name: "System tamper"
+    zones:
+      - zone: 1
+        open:
+          name: "Front door"
+          device_class: door
+        alarm_memory:
+          name: "Front door alarm memory"
+        tamper:
+          name: "Front door tamper"
+      - zone: 2
+        open:
+          name: "Dining room"
+          device_class: motion
+        alarm_memory:
+          name: "Dining room alarm memory"
 
-  zones:
-    - zone: 1
-      name: "Front door"
-      device_class: door
-      alarm_memory: true
-      tamper: true
-      bypass: true
-    - zone: 2
-      name: "Dining room"
-      device_class: motion
-      alarm_memory: true
-      bypass:
-        name: "Dining room excluded"
+switch:
+  - platform: kyo_alarm
+    zones:
+      - zone: 1
+        bypass:
+          name: "Front door bypass"
+      - zone: 2
+        bypass:
+          name: "Dining room excluded"
+
+button:
+  - platform: kyo_alarm
+    reset_memory:
+      name: "Reset alarm memory"
+
+text_sensor:
+  - platform: kyo_alarm
+    panel_model:
+      name: "Panel model"
+    firmware_version:
+      name: "Firmware version"

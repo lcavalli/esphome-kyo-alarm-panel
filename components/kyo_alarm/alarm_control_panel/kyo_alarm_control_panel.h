@@ -1,69 +1,12 @@
 #pragma once
 
-#include "esphome/core/defines.h"
+#include "esphome/components/alarm_control_panel/alarm_control_panel.h"
 #include "esphome/core/helpers.h"
 
-#include "kyo_alarm.h"
-
-#ifdef USE_BINARY_SENSOR
-#include "esphome/components/binary_sensor/binary_sensor.h"
-#endif
-#ifdef USE_SWITCH
-#include "esphome/components/switch/switch.h"
-#endif
-#ifdef USE_BUTTON
-#include "esphome/components/button/button.h"
-#endif
-#ifdef USE_ALARM_CONTROL_PANEL
-#include "esphome/components/alarm_control_panel/alarm_control_panel.h"
-#endif
+#include "../kyo_alarm.h"
 
 namespace esphome::kyo_alarm {
 
-#ifdef USE_BINARY_SENSOR
-/// Binary sensor bound to one bit of a status field (zone status, alarm memory, warnings, ...).
-class KyoStatusBinarySensor : public binary_sensor::BinarySensor, public KyoAlarmListener {
- public:
-  KyoStatusBinarySensor(StatusField field, uint8_t bit) : field_(field), bit_(bit) {}
-
-  void on_status_update(const KyoAlarmStatus &status) override;
-  void dump_config() override;
-
- protected:
-  StatusField field_;
-  uint8_t bit_;
-};
-#endif
-
-#ifdef USE_SWITCH
-/// Zone bypass switch: on when the zone is bypassed (excluded).
-class KyoZoneBypassSwitch : public switch_::Switch, public KyoAlarmListener, public Parented<KyoAlarmComponent> {
- public:
-  explicit KyoZoneBypassSwitch(uint8_t zone) : zone_(zone) {}
-
-  void on_status_update(const KyoAlarmStatus &status) override;
-  void dump_config() override;
-
- protected:
-  void write_state(bool state) override;
-
-  uint8_t zone_;
-};
-#endif
-
-#ifdef USE_BUTTON
-/// Resets the alarm and tamper memories.
-class KyoResetMemoryButton : public button::Button, public KyoAlarmListener, public Parented<KyoAlarmComponent> {
- public:
-  void on_status_update(const KyoAlarmStatus &status) override {}
-  void dump_config() override;
-
- protected:
-  void press_action() override;
-};
-#endif
-
-#ifdef USE_ALARM_CONTROL_PANEL
 /// Alarm control panel for the whole panel, each arming mode maps to a set of partitions.
 class KyoAlarmControlPanel : public alarm_control_panel::AlarmControlPanel,
                              public KyoAlarmListener,
@@ -102,6 +45,5 @@ class KyoAlarmControlPanel : public alarm_control_panel::AlarmControlPanel,
   alarm_control_panel::AlarmControlPanelState target_state_{alarm_control_panel::ACP_STATE_DISARMED};
   uint32_t transition_started_{0};
 };
-#endif
 
 }  // namespace esphome::kyo_alarm
