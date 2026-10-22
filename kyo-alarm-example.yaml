@@ -18,7 +18,10 @@ api:
 
 ota:
   - platform: esphome
-    encryption: true
+    # Encrypted with the api encryption key. To update a device still flashed with a password
+    # protected OTA, do the first install with its `password` and `allow_plaintext_upload: true`
+    # under `encryption`, then remove both.
+    encryption:
 
 time:
   - platform: homeassistant
