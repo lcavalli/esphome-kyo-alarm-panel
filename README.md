@@ -116,25 +116,6 @@ one `kyo_alarm` hub, set `kyo_alarm_id` on each platform.
 | `button` | `reset_memory`, resets alarm and tamper memories. |
 | `text_sensor` | `panel_model`, `firmware_version`. |
 
-### Migrating from the nested configuration
-
-Entities used to be declared under `kyo_alarm:`; the old keys are now rejected with a message naming the
-platform they moved to.
-
-| Before (under `kyo_alarm:`) | Now |
-| --- | --- |
-| `alarm_control_panel:` | `alarm_control_panel:` → `platform: kyo_alarm` |
-| `panel_model`, `firmware_version` | `text_sensor:` → `platform: kyo_alarm` |
-| `communication`, `warnings: {<flag>}` | `binary_sensor:` → `platform: kyo_alarm`, `<flag>` at the top level |
-| `tampers: {<flag>}` | `binary_sensor:` → `platform: kyo_alarm`, `tamper_<flag>` |
-| `zones:` with `name`/`device_class` | `binary_sensor:` → `zones:` → `open:` |
-| `zones:` → `alarm_memory`, `tamper`, `tamper_memory` | `binary_sensor:` → `zones:` |
-| `zones:` → `bypass` | `switch:` → `zones:` → `bypass:` |
-| `reset_memory` | `button:` → `platform: kyo_alarm` |
-
-The `true` shorthand is gone: each entity needs a `name`, which was previously derived from the zone name
-(e.g. "Front door alarm memory").
-
 ### Alarm control panel states
 
 - `triggered` when any partition is in alarm;
