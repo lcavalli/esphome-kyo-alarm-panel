@@ -17,9 +17,27 @@ concurrency:
 env:
   # Pinned so that a new ESPHome release does not break the checks unexpectedly, bump it on purpose
   ESPHOME_VERSION: "2026.10.0"
+  # Different versions may format differently, keep it in sync with the local one
+  CLANG_FORMAT_VERSION: "22.1.8"
   EXAMPLE: kyo-alarm-example.yaml
 
 jobs:
+  format:
+    name: Check the C++ formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install clang-format
+        run: pip install "clang-format==${CLANG_FORMAT_VERSION}"
+
+      - name: Check the formatting
+        run: git ls-files '*.cpp' '*.h' | xargs clang-format --dry-run --Werror
+
   example:
     name: Validate and compile the example
     runs-on: ubuntu-latest
