@@ -25,26 +25,6 @@ MODELS = {
 }
 MAX_ZONES = max(MODELS.values())
 
-# Options that moved to the entity platforms: key -> platforms
-MOVED_TO_PLATFORMS = {
-    "alarm_control_panel": ["alarm_control_panel"],
-    "panel_model": ["text_sensor"],
-    "firmware_version": ["text_sensor"],
-    "communication": ["binary_sensor"],
-    "warnings": ["binary_sensor"],
-    "tampers": ["binary_sensor"],
-    "zones": ["binary_sensor", "switch"],
-    "reset_memory": ["button"],
-}
-
-
-def moved_to_platforms(key, platforms):
-    names = " and ".join(f"'{platform}'" for platform in platforms)
-    plural = "s" if len(platforms) > 1 else ""
-    return cv.invalid(
-        f"'{key}' has been moved to the {names} platform{plural} of kyo_alarm"
-    )
-
 
 def validate_unique_zones(zones):
     seen = set()
@@ -91,10 +71,6 @@ CONFIG_SCHEMA = (
             cv.GenerateID(): cv.declare_id(KyoAlarmComponent),
             cv.Optional(CONF_MODEL, default="KYO32G"): cv.one_of(*MODELS, upper=True),
             cv.Optional(CONF_TIME_ID): cv.use_id(time.RealTimeClock),
-            **{
-                cv.Optional(key): moved_to_platforms(key, platforms)
-                for key, platforms in MOVED_TO_PLATFORMS.items()
-            },
         }
     )
     .extend(cv.polling_component_schema("1s"))
