@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned so that a new ESPHome release does not break the checks unexpectedly, bump it on purpose
+  ESPHOME_VERSION: "2026.10.0"
+  EXAMPLE: kyo-alarm-example.yaml
+
+jobs:
+  example:
+    name: Validate and compile the example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: .github/workflows/ci.yml
+
+      - name: Install ESPHome
+        run: pip install "esphome==${ESPHOME_VERSION}"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: platformio-${{ runner.os }}-esphome-${{ env.ESPHOME_VERSION }}
+
+      # The real secrets.yaml is not in the repository
+      - name: Create dummy secrets
+        run: |
+          cat > secrets.yaml <<EOF
+          wifi_ssid: ci
+          wifi_password: ci-password
+          api_encryption_key: "$(openssl rand -base64 32)"
+          EOF
+
+      - name: Validate the configuration
+        run: esphome config "${EXAMPLE}"
+
+      - name: Compile the firmware
+        run: esphome compile "${EXAMPLE}"
