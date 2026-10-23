@@ -44,7 +44,7 @@ optional<uint32_t> KyoAlarmStatus::get(StatusField field) const {
 void KyoAlarmComponent::setup() {
 #ifdef USE_TIME
   if (this->time_ != nullptr) {
-    this->time_->add_on_time_sync_callback([this]() { this->set_datetime(this->time_->now()); });
+    this->time_->add_on_time_sync_callback([this]() { this->sync_clock_(); });
   }
 #endif
   this->disable_loop();
@@ -63,7 +63,8 @@ void KyoAlarmComponent::dump_config() {
 #endif
 #ifdef USE_TIME
   if (this->time_ != nullptr)
-    ESP_LOGCONFIG(TAG, "  Panel clock synchronized with time source");
+    ESP_LOGCONFIG(TAG, "  Panel clock synchronized with time source every %" PRIu32 "s",
+                  this->clock_sync_interval_ / 1000);
 #endif
   for (auto *listener : this->listeners_)
     listener->dump_config();
@@ -214,6 +215,24 @@ void KyoAlarmComponent::set_datetime(const ESPTime &time, ResultCallback &&callb
   };
   this->enqueue_write_(KYO_REG_DATETIME, data, sizeof(data), DATETIME_TIMEOUT_MS, std::move(callback));
 }
+
+#ifdef USE_TIME
+void KyoAlarmComponent::sync_clock_() {
+  // The time source syncs every few minutes: write the panel clock only the first time, once per interval and
+  // when the UTC offset changes (DST), to limit writes to the panel
+  int32_t timezone_offset = ESPTime::timezone_offset();
+  if (this->clock_synced_ && timezone_offset == this->clock_timezone_offset_ &&
+      millis() - this->clock_synced_at_ < this->clock_sync_interval_)
+    return;
+  this->set_datetime(this->time_->now(), [this, timezone_offset](bool success) {
+    if (!success)
+      return;
+    this->clock_synced_ = true;
+    this->clock_synced_at_ = millis();
+    this->clock_timezone_offset_ = timezone_offset;
+  });
+}
+#endif
 
 KyoAlarmComponent::Request KyoAlarmComponent::make_read_(uint16_t address, uint8_t size,
                                                          std::function<void(bool, const uint8_t *)> &&callback) {

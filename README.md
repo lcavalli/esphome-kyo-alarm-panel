@@ -104,7 +104,8 @@ one `kyo_alarm` hub, set `kyo_alarm_id` on each platform.
 | --- | --- |
 | `model` | Panel model, currently `KYO32G`. |
 | `update_interval` | Status polling interval, default `1s`. |
-| `time_id` | Time source used to set the panel clock on every time sync. |
+| `time_id` | Time source used to set the panel clock. |
+| `clock_sync_interval` | Minimum interval between two writes of the panel clock, default `24h`, at most `7d`. The clock is also set on the first time sync after boot and when the UTC offset changes (DST); failed writes are retried on the next time sync. |
 
 ### Platforms
 
