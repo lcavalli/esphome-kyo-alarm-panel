@@ -8,6 +8,7 @@ CODEOWNERS = ["@lcavalli"]
 DEPENDENCIES = ["uart"]
 MULTI_CONF = True
 
+CONF_CLOCK_SYNC_INTERVAL = "clock_sync_interval"
 CONF_KYO_ALARM_ID = "kyo_alarm_id"
 CONF_ZONE = "zone"
 CONF_ZONES = "zones"
@@ -51,11 +52,16 @@ def zones_schema(entities):
     )
 
 
-def final_validate_zones(config):
-    """Check the zone numbers of a platform against the model of its hub."""
+def get_hub_config(config):
+    """The configuration of the hub of a platform, during final validation."""
     full_config = fv.full_config.get()
     hub_path = full_config.get_path_for_id(config[CONF_KYO_ALARM_ID])[:-1]
-    model = full_config.get_config_for_path(hub_path)[CONF_MODEL]
+    return full_config.get_config_for_path(hub_path)
+
+
+def final_validate_zones(config):
+    """Check the zone numbers of a platform against the model of its hub."""
+    model = get_hub_config(config)[CONF_MODEL]
     for index, zone in enumerate(config.get(CONF_ZONES, [])):
         if (number := zone[CONF_ZONE]) > MODELS[model]:
             raise cv.Invalid(
@@ -71,6 +77,10 @@ CONFIG_SCHEMA = (
             cv.GenerateID(): cv.declare_id(KyoAlarmComponent),
             cv.Optional(CONF_MODEL, default="KYO32G"): cv.one_of(*MODELS, upper=True),
             cv.Optional(CONF_TIME_ID): cv.use_id(time.RealTimeClock),
+            cv.Optional(CONF_CLOCK_SYNC_INTERVAL, default="24h"): cv.All(
+                cv.positive_time_period_milliseconds,
+                cv.Range(max=cv.TimePeriod(days=7)),
+            ),
         }
     )
     .extend(cv.polling_component_schema("1s"))
@@ -97,3 +107,4 @@ async def to_code(config):
 
     if time_id := config.get(CONF_TIME_ID):
         cg.add(var.set_time(await cg.get_variable(time_id)))
+        cg.add(var.set_clock_sync_interval(config[CONF_CLOCK_SYNC_INTERVAL]))

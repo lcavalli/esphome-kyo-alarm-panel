@@ -97,6 +97,7 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
 #endif
 #ifdef USE_TIME
   void set_time(time::RealTimeClock *time) { this->time_ = time; }
+  void set_clock_sync_interval(uint32_t interval_ms) { this->clock_sync_interval_ = interval_ms; }
 #endif
 
   const KyoAlarmStatus &get_status() const { return this->status_; }
@@ -114,6 +115,10 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
   void reset_memory(ResultCallback &&callback = nullptr);
   /// Set the panel clock.
   void set_datetime(const ESPTime &time, ResultCallback &&callback = nullptr);
+#ifdef USE_TIME
+  /// Set the panel clock from the time source now, regardless of `clock_sync_interval`.
+  void sync_clock(ResultCallback &&callback = nullptr);
+#endif
 
  protected:
   enum class Phase : uint8_t {
@@ -150,6 +155,9 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
   void handle_realtime_(const uint8_t *data);
   void handle_status_(const uint8_t *data);
   void set_online_(bool online);
+#ifdef USE_TIME
+  void on_time_sync_();
+#endif
   void notify_listeners_();
 
   const char *model_{""};
@@ -161,6 +169,11 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
 #endif
 #ifdef USE_TIME
   time::RealTimeClock *time_{nullptr};
+  uint32_t clock_sync_interval_{0};
+  // Last successful write of the panel clock
+  bool clock_synced_{false};
+  uint32_t clock_synced_at_{0};
+  int32_t clock_timezone_offset_{0};
 #endif
 
   Phase phase_{Phase::READ_PANEL_INFO};

@@ -100,6 +100,8 @@ button:
   - platform: kyo_alarm
     reset_memory:
       name: "Reset alarm memory"
+    sync_clock:
+      name: "Sync panel clock"
 
 text_sensor:
   - platform: kyo_alarm
