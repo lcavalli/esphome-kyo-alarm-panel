@@ -52,11 +52,16 @@ def zones_schema(entities):
     )
 
 
-def final_validate_zones(config):
-    """Check the zone numbers of a platform against the model of its hub."""
+def get_hub_config(config):
+    """The configuration of the hub of a platform, during final validation."""
     full_config = fv.full_config.get()
     hub_path = full_config.get_path_for_id(config[CONF_KYO_ALARM_ID])[:-1]
-    model = full_config.get_config_for_path(hub_path)[CONF_MODEL]
+    return full_config.get_config_for_path(hub_path)
+
+
+def final_validate_zones(config):
+    """Check the zone numbers of a platform against the model of its hub."""
+    model = get_hub_config(config)[CONF_MODEL]
     for index, zone in enumerate(config.get(CONF_ZONES, [])):
         if (number := zone[CONF_ZONE]) > MODELS[model]:
             raise cv.Invalid(
