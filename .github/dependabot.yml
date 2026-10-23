@@ -1,0 +1,16 @@
+version: 2
+updates:
+  # Actions used by the workflows, in a single pull request
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Tools used by the CI workflow, one pull request each so that a failing update does not hold back the others
+  - package-ecosystem: pip
+    directory: /.github
+    schedule:
+      interval: weekly
