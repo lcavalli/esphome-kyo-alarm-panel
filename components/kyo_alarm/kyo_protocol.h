@@ -51,7 +51,7 @@ static const uint16_t KYO_REG_RESET = 0xf005;
 static const uint8_t KYO_REG_RESET_SIZE = 2;
 
 // Real-time status register layout
-static const size_t KYO_RT_ZONE_OPEN = 0;    // 4 bytes zone bitmap
+static const size_t KYO_RT_ZONE_ACTIVE = 0;  // 4 bytes zone bitmap
 static const size_t KYO_RT_ZONE_TAMPER = 4;  // 4 bytes zone bitmap
 static const size_t KYO_RT_WARNINGS = 8;
 static const size_t KYO_RT_PARTITION_ALARM = 9;

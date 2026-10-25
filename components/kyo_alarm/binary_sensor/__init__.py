@@ -56,7 +56,7 @@ TAMPERS = {
 
 # Zone entities: key -> status field
 ZONE_FIELDS = {
-    CONF_SENSOR: StatusField.ZONE_OPEN,
+    CONF_SENSOR: StatusField.ZONE_ACTIVE,
     CONF_TAMPER: StatusField.ZONE_TAMPER,
     CONF_ALARM_MEMORY: StatusField.ZONE_ALARM_MEMORY,
     CONF_TAMPER_MEMORY: StatusField.ZONE_TAMPER_MEMORY,

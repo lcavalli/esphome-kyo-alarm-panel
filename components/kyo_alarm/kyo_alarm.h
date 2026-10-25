@@ -24,7 +24,7 @@ namespace esphome::kyo_alarm {
 /// Fields of the panel status an entity can be bound to.
 enum class StatusField : uint8_t {
   ONLINE,
-  ZONE_OPEN,
+  ZONE_ACTIVE,
   ZONE_TAMPER,
   ZONE_BYPASS,
   ZONE_ALARM_MEMORY,
@@ -44,7 +44,7 @@ struct KyoAlarmStatus {
   uint8_t partitions{0};
 
   // Real-time register
-  uint32_t zone_open{0};
+  uint32_t zone_active{0};
   uint32_t zone_tamper{0};
   uint8_t partition_alarm{0};
   uint8_t warnings{0};
