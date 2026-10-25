@@ -3,6 +3,7 @@ from esphome.components import binary_sensor
 import esphome.config_validation as cv
 from esphome.const import (
     CONF_ID,
+    CONF_SENSOR,
     DEVICE_CLASS_CONNECTIVITY,
     DEVICE_CLASS_PROBLEM,
     DEVICE_CLASS_TAMPER,
@@ -25,7 +26,6 @@ DEPENDENCIES = ["kyo_alarm"]
 
 CONF_ALARM_MEMORY = "alarm_memory"
 CONF_COMMUNICATION = "communication"
-CONF_OPEN = "open"
 CONF_TAMPER = "tamper"
 CONF_TAMPER_MEMORY = "tamper_memory"
 
@@ -56,7 +56,7 @@ TAMPERS = {
 
 # Zone entities: key -> status field
 ZONE_FIELDS = {
-    CONF_OPEN: StatusField.ZONE_OPEN,
+    CONF_SENSOR: StatusField.ZONE_ACTIVE,
     CONF_TAMPER: StatusField.ZONE_TAMPER,
     CONF_ALARM_MEMORY: StatusField.ZONE_ALARM_MEMORY,
     CONF_TAMPER_MEMORY: StatusField.ZONE_TAMPER_MEMORY,
@@ -80,7 +80,7 @@ CONFIG_SCHEMA = cv.Schema(
         **{cv.Optional(key): flag_schema(DEVICE_CLASS_TAMPER) for key in TAMPERS},
         cv.Optional(CONF_ZONES): zones_schema(
             {
-                CONF_OPEN: binary_sensor.binary_sensor_schema(KyoStatusBinarySensor),
+                CONF_SENSOR: binary_sensor.binary_sensor_schema(KyoStatusBinarySensor),
                 CONF_TAMPER: binary_sensor.binary_sensor_schema(
                     KyoStatusBinarySensor, device_class=DEVICE_CLASS_TAMPER
                 ),

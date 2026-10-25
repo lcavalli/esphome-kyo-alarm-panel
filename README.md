@@ -61,7 +61,7 @@ binary_sensor:
       name: "Low battery"
     zones:
       - zone: 1
-        open:
+        sensor:
           name: "Front door"
           device_class: door
         alarm_memory:
@@ -71,7 +71,7 @@ binary_sensor:
         tamper_memory:
           name: "Front door tamper memory"
       - zone: 2
-        open:
+        sensor:
           name: "Dining room"
           device_class: motion
 
@@ -114,7 +114,7 @@ one `kyo_alarm` hub, set `kyo_alarm_id` on each platform.
 | Platform | Keys |
 | --- | --- |
 | `alarm_control_panel` | The panel entity, with `partitions` (`away`, `home`, `night`, `vacation`), `requires_code` and `requires_code_to_arm`. Arming modes without partitions are not offered. |
-| `binary_sensor` | `communication` (off after 3 failed requests); warnings `mains_failure`, `bpi_missing`, `fuse_fault`, `low_battery`, `phone_line_fault`, `default_codes`, `wireless_fault`; tampers `tamper_zone`, `tamper_false_key`, `tamper_bpi`, `tamper_system`, `tamper_rf_jam`, `tamper_wireless`; `zones`, a list of `zone` with `open`, `tamper`, `alarm_memory`, `tamper_memory`. |
+| `binary_sensor` | `communication` (off after 3 failed requests); warnings `mains_failure`, `bpi_missing`, `fuse_fault`, `low_battery`, `phone_line_fault`, `default_codes`, `wireless_fault`; tampers `tamper_zone`, `tamper_false_key`, `tamper_bpi`, `tamper_system`, `tamper_rf_jam`, `tamper_wireless`; `zones`, a list of `zone` with `sensor`, `tamper`, `alarm_memory`, `tamper_memory`. |
 | `switch` | `zones`, a list of `zone` with `bypass`. |
 | `button` | `reset_memory`, resets alarm and tamper memories; `sync_clock`, sets the panel clock from the time source now, regardless of `clock_sync_interval` (requires `time_id` on the hub). |
 | `text_sensor` | `panel_model`, `firmware_version`. |

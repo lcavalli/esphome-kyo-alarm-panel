@@ -21,8 +21,8 @@ optional<uint32_t> KyoAlarmStatus::get(StatusField field) const {
   switch (field) {
     case StatusField::ONLINE:
       return this->online ? 1 : 0;
-    case StatusField::ZONE_OPEN:
-      return this->realtime_valid ? make_optional(this->zone_open) : nullopt;
+    case StatusField::ZONE_ACTIVE:
+      return this->realtime_valid ? make_optional(this->zone_active) : nullopt;
     case StatusField::ZONE_TAMPER:
       return this->realtime_valid ? make_optional(this->zone_tamper) : nullopt;
     case StatusField::PARTITION_ALARM:
@@ -407,7 +407,7 @@ void KyoAlarmComponent::handle_partitions_(const uint8_t *data) {
 }
 
 void KyoAlarmComponent::handle_realtime_(const uint8_t *data) {
-  this->status_.zone_open = kyo_decode_zones(data + KYO_RT_ZONE_OPEN);
+  this->status_.zone_active = kyo_decode_zones(data + KYO_RT_ZONE_ACTIVE);
   this->status_.zone_tamper = kyo_decode_zones(data + KYO_RT_ZONE_TAMPER);
   this->status_.warnings = data[KYO_RT_WARNINGS];
   this->status_.partition_alarm = data[KYO_RT_PARTITION_ALARM];
