@@ -72,7 +72,7 @@ binary_sensor:
       name: "System tamper"
     zones:
       - zone: 1
-        open:
+        sensor:
           name: "Front door"
           device_class: door
         alarm_memory:
@@ -80,7 +80,7 @@ binary_sensor:
         tamper:
           name: "Front door tamper"
       - zone: 2
-        open:
+        sensor:
           name: "Dining room"
           device_class: motion
         alarm_memory:
