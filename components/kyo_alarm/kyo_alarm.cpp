@@ -246,6 +246,71 @@ void KyoAlarmComponent::on_time_sync_() {
 }
 #endif
 
+void KyoAlarmComponent::read_raw(const std::string &request, ResultCallback &&callback) {
+  uint8_t header[KYO_HEADER_SIZE];
+  size_t size = kyo_parse_hex(request.c_str(), header, sizeof(header));
+  const char *error = nullptr;
+  if (this->raw_pending_) {
+    error = "Another raw read is in progress";
+  } else if (size < KYO_HEADER_SIZE - 1) {
+    error = "Expected a read request header in hex, e.g. F0 00 00 0B 00";
+  } else if (header[0] != KYO_OP_READ) {
+    error = "Only read requests (F0) are allowed";
+  } else if (header[3] >= KYO_MAX_READ_SIZE || header[4] != 0x00) {
+    error = "Invalid size, reads are at most 64 bytes (3F 00)";
+  } else if (size == KYO_HEADER_SIZE && !kyo_verify_checksum(header, size)) {
+    error = "Header checksum mismatch";
+  } else {
+    uint32_t start = header[1] | uint32_t(header[2]) << 8;
+    uint32_t end = start + header[3] + 1;
+    if (start < KYO_REG_INSTALLER_PIN + KYO_REG_INSTALLER_PIN_SIZE && end > KYO_REG_PINS_1)
+      error = "The PIN table cannot be read";
+  }
+  if (error != nullptr) {
+    ESP_LOGW(TAG, "Raw read refused: %s", error);
+    this->raw_reply_.clear();
+    this->raw_error_ = error;
+    if (callback)
+      callback(false);
+    return;
+  }
+
+  uint16_t address = header[1] | header[2] << 8;
+  uint8_t data_size = header[3] + 1;
+  ESP_LOGD(TAG, "Raw read of %u bytes at 0x%04X", data_size, address);
+  this->raw_pending_ = true;
+  this->push_back_(this->make_read_(
+      address, data_size, [this, data_size, callback = std::move(callback)](bool success, const uint8_t *data) {
+        this->raw_pending_ = false;
+        this->raw_reply_.clear();
+        this->raw_error_.clear();
+        // Whatever arrived after the header echo, even if incomplete
+        size_t received = data != nullptr && this->rx_size_ > KYO_HEADER_SIZE ? this->rx_size_ - KYO_HEADER_SIZE : 0;
+        if (received > size_t(data_size) + 1)
+          received = data_size + 1;
+        if (received > 0) {
+          char hex[format_hex_pretty_size(KYO_MAX_READ_SIZE + 1)];
+          this->raw_reply_ = format_hex_pretty_to(hex, data, received, ' ');
+        }
+        if (data == nullptr) {
+          this->raw_error_ = "Request queue full";
+        } else if (received == 0) {
+          this->raw_error_ = "No reply from the panel";
+        } else if (received < size_t(data_size) + 1) {
+          this->raw_error_ = "Incomplete reply from the panel";
+        } else if (!success) {
+          this->raw_error_ = "Reply checksum mismatch";
+        }
+        if (this->raw_error_.empty()) {
+          ESP_LOGD(TAG, "Raw read reply: %s", this->raw_reply_.c_str());
+        } else {
+          ESP_LOGW(TAG, "Raw read failed: %s %s", this->raw_error_.c_str(), this->raw_reply_.c_str());
+        }
+        if (callback)
+          callback(this->raw_error_.empty());
+      }));
+}
+
 KyoAlarmComponent::Request KyoAlarmComponent::make_read_(uint16_t address, uint8_t size,
                                                          std::function<void(bool, const uint8_t *)> &&callback) {
   Request request;

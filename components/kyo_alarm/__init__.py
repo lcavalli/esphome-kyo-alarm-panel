@@ -1,3 +1,4 @@
+from esphome import automation
 import esphome.codegen as cg
 from esphome.components import time, uart
 import esphome.config_validation as cv
@@ -10,6 +11,7 @@ MULTI_CONF = True
 
 CONF_CLOCK_SYNC_INTERVAL = "clock_sync_interval"
 CONF_KYO_ALARM_ID = "kyo_alarm_id"
+CONF_REQUEST = "request"
 CONF_ZONE = "zone"
 CONF_ZONES = "zones"
 
@@ -19,6 +21,7 @@ KyoAlarmComponent = kyo_alarm_ns.class_(
 )
 KyoAlarmListener = kyo_alarm_ns.class_("KyoAlarmListener")
 StatusField = kyo_alarm_ns.enum("StatusField", is_class=True)
+ReadRawAction = kyo_alarm_ns.class_("ReadRawAction", automation.Action)
 
 # Supported models and their number of zones
 MODELS = {
@@ -108,3 +111,22 @@ async def to_code(config):
     if time_id := config.get(CONF_TIME_ID):
         cg.add(var.set_time(await cg.get_variable(time_id)))
         cg.add(var.set_clock_sync_interval(config[CONF_CLOCK_SYNC_INTERVAL]))
+
+
+@automation.register_action(
+    "kyo_alarm.read_raw",
+    ReadRawAction,
+    cv.Schema(
+        {
+            cv.GenerateID(): cv.use_id(KyoAlarmComponent),
+            cv.Required(CONF_REQUEST): cv.templatable(cv.string),
+        }
+    ),
+    synchronous=False,
+)
+async def read_raw_to_code(config, action_id, template_arg, args):
+    var = cg.new_Pvariable(action_id, template_arg)
+    await cg.register_parented(var, config[CONF_ID])
+    request = await cg.templatable(config[CONF_REQUEST], args, cg.std_string)
+    cg.add(var.set_request(request))
+    return var
