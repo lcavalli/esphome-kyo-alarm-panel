@@ -15,6 +15,19 @@ wifi:
 api:
   encryption:
     key: !secret api_encryption_key
+  actions:
+    # Diagnostics: read the panel memory, e.g. request "F0 00 00 0B 00"
+    - action: read_raw
+      variables:
+        request: string
+      then:
+        - kyo_alarm.read_raw:
+            id: kyo
+            request: !lambda return request;
+        - api.respond:
+            success: !lambda return id(kyo).get_raw_error().empty();
+            error_message: !lambda return id(kyo).get_raw_error();
+            data: !lambda root["reply"] = id(kyo).get_raw_reply();
 
 ota:
   - platform: esphome

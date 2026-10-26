@@ -129,3 +129,34 @@ one `kyo_alarm` hub, set `kyo_alarm_id` on each platform.
 - `pending` until the panel status has been read.
 
 Zones can only be bypassed while the panel is disarmed.
+
+### Raw reads (diagnostics)
+
+The `kyo_alarm.read_raw` action sends a read request written in hex and waits for the reply, to explore the panel
+memory from Home Assistant. Expose it as a Home Assistant action that returns the reply:
+
+```yaml
+api:
+  actions:
+    - action: read_raw
+      variables:
+        request: string
+      then:
+        - kyo_alarm.read_raw:
+            id: kyo
+            request: !lambda return request;
+        - api.respond:
+            success: !lambda return id(kyo).get_raw_error().empty();
+            error_message: !lambda return id(kyo).get_raw_error();
+            data: !lambda root["reply"] = id(kyo).get_raw_reply();
+```
+
+Then call it from *Developer tools → Actions* (`esphome.<device>_read_raw`), e.g. with
+`request: "F0 00 00 0B 00"` to read the 12 bytes of panel model and firmware at `0x0000`. The request is the 5 header bytes
+(`F0 <address lo> <address hi> <size - 1> 00`), with or without the checksum, as pairs of hex digits optionally
+separated by spaces, commas, colons or dashes (`0x` prefixes are accepted). The reply holds the data and the
+checksum sent by the panel, e.g. `{"reply": "4B 59 4F 33 32 47 20 20 32 2E 31 33 A3"}` (`KYO32G  2.13`).
+
+Only reads of at most 64 bytes are allowed; writes and reads of the PIN table are refused, and one raw read
+runs at a time. Failures (refused request, no reply, checksum mismatch) are returned as errors and logged
+with the bytes received.

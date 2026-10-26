@@ -33,6 +33,42 @@ void kyo_encode_close(uint8_t *out) {
   out[5] = kyo_checksum(out, KYO_HEADER_SIZE - 1);
 }
 
+static int hex_digit(char c) {
+  if (c >= '0' && c <= '9')
+    return c - '0';
+  if (c >= 'a' && c <= 'f')
+    return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F')
+    return c - 'A' + 10;
+  return -1;
+}
+
+static bool is_hex_separator(char c) { return c == ' ' || c == '\t' || c == ',' || c == ':' || c == '-'; }
+
+size_t kyo_parse_hex(const char *hex, uint8_t *out, size_t max_size) {
+  size_t size = 0;
+  while (*hex != '\0') {
+    if (is_hex_separator(*hex)) {
+      hex++;
+      continue;
+    }
+    // A token is an optional 0x prefix and an even number of digits
+    if (hex[0] == '0' && (hex[1] == 'x' || hex[1] == 'X'))
+      hex += 2;
+    size_t digits = 0;
+    for (; hex[digits] != '\0' && !is_hex_separator(hex[digits]); digits++) {
+      if (hex_digit(hex[digits]) < 0)
+        return 0;
+    }
+    if (digits == 0 || digits % 2 != 0 || size + digits / 2 > max_size)
+      return 0;
+    for (size_t i = 0; i < digits; i += 2)
+      out[size++] = uint8_t(hex_digit(hex[i]) << 4 | hex_digit(hex[i + 1]));
+    hex += digits;
+  }
+  return size;
+}
+
 uint32_t kyo_decode_zones(const uint8_t *data) {
   return (uint32_t(data[0]) << 24) | (uint32_t(data[1]) << 16) | (uint32_t(data[2]) << 8) | uint32_t(data[3]);
 }

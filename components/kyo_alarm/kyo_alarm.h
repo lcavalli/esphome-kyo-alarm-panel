@@ -2,6 +2,7 @@
 
 #include <array>
 #include <functional>
+#include <string>
 #include <vector>
 
 #include "esphome/components/uart/uart.h"
@@ -120,6 +121,17 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
   void sync_clock(ResultCallback &&callback = nullptr);
 #endif
 
+  // Raw reads, for diagnostics
+
+  /// Send `request`, a read request header in hex (checksum optional), e.g. "F0 00 00 0B 00".
+  /// When `callback` is called, get_raw_reply() and get_raw_error() hold the outcome. Writes and the PIN table are
+  /// refused, and only one raw read can be in progress.
+  void read_raw(const std::string &request, ResultCallback &&callback);
+  /// Reply to the last raw read in hex (data and checksum), empty if none was received.
+  const std::string &get_raw_reply() const { return this->raw_reply_; }
+  /// Why the last raw read failed, empty if it succeeded.
+  const std::string &get_raw_error() const { return this->raw_error_; }
+
  protected:
   enum class Phase : uint8_t {
     READ_PANEL_INFO,
@@ -192,6 +204,11 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
 
   // PIN table, filled while verifying a code and wiped right after
   std::array<uint8_t, KYO_REG_PINS_1_SIZE + KYO_REG_PINS_2_SIZE> pins_{};
+
+  // Outcome of the last raw read
+  bool raw_pending_{false};
+  std::string raw_reply_;
+  std::string raw_error_;
 };
 
 }  // namespace esphome::kyo_alarm

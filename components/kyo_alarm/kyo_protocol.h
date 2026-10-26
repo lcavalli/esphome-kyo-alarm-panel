@@ -25,6 +25,8 @@ static const uint8_t KYO_OP_CLOSE = 0x3c;
 static const uint8_t KYO_MAX_ZONES = 32;
 static const uint8_t KYO_MAX_PARTITIONS = 8;
 static const uint8_t KYO_MAX_PINS = 24;
+/// Largest read the panel answers (the official software never reads more)
+static const uint8_t KYO_MAX_READ_SIZE = 64;
 
 // Readable registers and their sizes (data bytes, checksum excluded)
 static const uint16_t KYO_REG_PANEL_INFO = 0x0000;
@@ -33,6 +35,8 @@ static const uint16_t KYO_REG_PINS_1 = 0x01b4;
 static const uint8_t KYO_REG_PINS_1_SIZE = 64;
 static const uint16_t KYO_REG_PINS_2 = 0x01f4;
 static const uint8_t KYO_REG_PINS_2_SIZE = 8;
+static const uint16_t KYO_REG_INSTALLER_PIN = 0x01fc;
+static const uint8_t KYO_REG_INSTALLER_PIN_SIZE = 3;
 static const uint16_t KYO_REG_PARTITIONS = 0x01ff;
 static const uint8_t KYO_REG_PARTITIONS_SIZE = 2;
 static const uint16_t KYO_REG_STATUS = 0x1502;
@@ -75,6 +79,11 @@ bool kyo_verify_checksum(const uint8_t *data, size_t len);
 void kyo_encode_header(uint8_t op, uint16_t address, uint8_t size, uint8_t *out);
 /// Encode a close request into `out` (KYO_HEADER_SIZE bytes).
 void kyo_encode_close(uint8_t *out);
+
+/// Parse bytes written in hex ("F0 03 F0", "f003f0", "0xf0, 0x03, 0xf0") into `out`, at most `max_size` bytes.
+/// Bytes are pairs of hex digits, optionally separated by spaces, commas, colons or dashes.
+/// Returns the number of bytes, 0 if `hex` is empty, invalid or too long.
+size_t kyo_parse_hex(const char *hex, uint8_t *out, size_t max_size);
 
 /// Decode a 4 byte zone bitmap (zones 32..25 first) into a mask where bit 0 is zone 1.
 uint32_t kyo_decode_zones(const uint8_t *data);
