@@ -64,7 +64,7 @@ struct KyoAlarmStatus {
   uint8_t armed() const {
     return (this->armed_total | this->armed_partial | this->armed_partial_no_delay) & this->partitions;
   }
-  /// Bitmap of `field`, or nothing if it has not been read from the panel yet.
+  /// Bitmap of `field`, or nothing if it is unknown (not read yet, or communication lost).
   optional<uint32_t> get(StatusField field) const;
 };
 

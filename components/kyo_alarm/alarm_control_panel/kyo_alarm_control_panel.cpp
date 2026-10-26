@@ -34,6 +34,10 @@ void KyoAlarmControlPanel::control(const AlarmControlPanelCall &call) {
   const auto &state = call.get_state();
   if (!state.has_value())
     return;
+  if (!this->parent_->get_status().status_valid) {
+    ESP_LOGW(TAG, "Panel status unknown, command ignored");
+    return;
+  }
 
   uint8_t arm = 0;
   uint8_t disarm = 0;
@@ -81,17 +85,22 @@ void KyoAlarmControlPanel::control(const AlarmControlPanelCall &call) {
 }
 
 void KyoAlarmControlPanel::execute_(AlarmControlPanelState target, uint8_t arm, uint8_t disarm) {
+  AlarmControlPanelState previous = this->get_state();
   this->in_transition_ = true;
   this->target_state_ = target;
   this->desired_state_ = target;
   this->transition_started_ = millis();
   this->publish_state(target == ACP_STATE_DISARMED ? ACP_STATE_DISARMING : ACP_STATE_ARMING);
 
-  this->parent_->control_partitions(arm, disarm, [this](bool success) {
+  this->parent_->control_partitions(arm, disarm, [this, previous](bool success) {
     if (!success) {
-      // Go back to the actual panel state
+      // Go back to the actual panel state, or to the state before the command if it is unknown (communication lost)
       this->in_transition_ = false;
-      this->on_status_update(this->parent_->get_status());
+      if (this->parent_->get_status().status_valid) {
+        this->on_status_update(this->parent_->get_status());
+      } else {
+        this->publish_state(previous);
+      }
     }
   });
 }

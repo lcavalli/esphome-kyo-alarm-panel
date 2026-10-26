@@ -183,7 +183,9 @@ void KyoAlarmComponent::control_partitions(uint8_t arm, uint8_t disarm, ResultCa
 void KyoAlarmComponent::set_zone_bypass(uint8_t zone, bool bypass, ResultCallback &&callback) {
   if (zone >= this->max_zones_) {
     ESP_LOGE(TAG, "Invalid zone %u", zone + 1);
-  } else if (!this->status_.status_valid || this->status_.armed() != 0) {
+  } else if (!this->status_.status_valid) {
+    ESP_LOGW(TAG, "Panel status unknown, zone %u not changed", zone + 1);
+  } else if (this->status_.armed() != 0) {
     ESP_LOGW(TAG, "Zones can only be bypassed while the panel is disarmed");
   } else {
     ESP_LOGD(TAG, "%s zone %u", bypass ? "Bypassing" : "Restoring", zone + 1);
@@ -502,6 +504,13 @@ void KyoAlarmComponent::set_online_(bool online) {
     ESP_LOGW(TAG, "Panel not responding");
   }
   this->status_.online = online;
+  if (!online) {
+    // The last status read is stale: it is reported as unknown until the next poll. The panel may also have been
+    // restarted or reprogrammed, so model and partitions are read again once it answers
+    this->status_.realtime_valid = false;
+    this->status_.status_valid = false;
+    this->phase_ = Phase::READ_PANEL_INFO;
+  }
   this->notify_listeners_();
 }
 
