@@ -114,7 +114,7 @@ one `kyo_alarm` hub, set `kyo_alarm_id` on each platform.
 | Platform | Keys |
 | --- | --- |
 | `alarm_control_panel` | The panel entity, with `partitions` (`away`, `home`, `night`, `vacation`), `requires_code` and `requires_code_to_arm`. Arming modes without partitions are not offered. |
-| `binary_sensor` | `communication` (off after 3 failed requests); warnings `mains_failure`, `bpi_missing`, `fuse_fault`, `low_battery`, `phone_line_fault`, `default_codes`, `wireless_fault`; tampers `tamper_zone`, `tamper_false_key`, `tamper_bpi`, `tamper_system`, `tamper_rf_jam`, `tamper_wireless`; `zones`, a list of `zone` with `sensor`, `tamper`, `alarm_memory`, `tamper_memory`. |
+| `binary_sensor` | `communication` (off after 3 failed requests, see [Communication loss](#communication-loss)); warnings `mains_failure`, `bpi_missing`, `fuse_fault`, `low_battery`, `phone_line_fault`, `default_codes`, `wireless_fault`; tampers `tamper_zone`, `tamper_false_key`, `tamper_bpi`, `tamper_system`, `tamper_rf_jam`, `tamper_wireless`; `zones`, a list of `zone` with `sensor`, `tamper`, `alarm_memory`, `tamper_memory`. |
 | `switch` | `zones`, a list of `zone` with `bypass`. |
 | `button` | `reset_memory`, resets alarm and tamper memories; `sync_clock`, sets the panel clock from the time source now, regardless of `clock_sync_interval` (requires `time_id` on the hub). |
 | `text_sensor` | `panel_model`, `firmware_version`. |
@@ -129,6 +129,20 @@ one `kyo_alarm` hub, set `kyo_alarm_id` on each platform.
 - `pending` until the panel status has been read.
 
 Zones can only be bypassed while the panel is disarmed.
+
+### Communication loss
+
+After 3 failed requests in a row the `communication` binary sensor turns off and the last panel status is no
+longer trusted:
+
+- the other binary sensors (zones, memories, warnings, tampers) become unknown;
+- the alarm control panel and the bypass switches keep their last state (ESPHome cannot report them as
+  unknown), but commands are refused until the status is read again;
+- the hub keeps polling, starting again from the panel model and partitions, in case the panel was restarted or
+  reprogrammed in the meantime.
+
+Recovery is automatic: as soon as the panel answers, `communication` turns on and every entity is updated with
+the new status.
 
 ### Raw reads (diagnostics)
 

@@ -8,8 +8,12 @@ static const char *const TAG = "kyo_alarm.binary_sensor";
 
 void KyoStatusBinarySensor::on_status_update(const KyoAlarmStatus &status) {
   auto value = status.get(this->field_);
-  if (value.has_value())
+  if (value.has_value()) {
     this->publish_state((*value >> this->bit_) & 1);
+  } else {
+    // Not read yet or communication lost
+    this->invalidate_state();
+  }
 }
 
 void KyoStatusBinarySensor::dump_config() { LOG_BINARY_SENSOR("  ", "Binary sensor", this); }
