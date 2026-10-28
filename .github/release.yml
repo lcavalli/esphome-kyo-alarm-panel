@@ -1,0 +1,23 @@
+# Categories of the automatically generated release notes, by pull request label. A pull request goes in the first
+# category that matches, so breaking changes are listed first whatever their type
+changelog:
+  exclude:
+    labels:
+      - duplicate
+      - invalid
+      - wontfix
+  categories:
+    - title: Breaking changes
+      labels: [breaking-change]
+    - title: New features and improvements
+      labels: [enhancement]
+    - title: Bug fixes
+      labels: [bug]
+    - title: Documentation
+      labels: [documentation]
+    - title: Maintenance
+      labels: [maintenance]
+    - title: Dependencies
+      labels: [dependencies]
+    - title: Other changes
+      labels: ["*"]
