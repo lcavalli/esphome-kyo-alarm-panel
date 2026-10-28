@@ -7,5 +7,6 @@ __pycache__/
 
 .esphome/
 .ruff_cache/
+.venv/
 .vscode/
 secrets.yaml

@@ -174,3 +174,20 @@ checksum sent by the panel, e.g. `{"reply": "4B 59 4F 33 32 47 20 20 32 2E 31 33
 Only reads of at most 64 bytes are allowed; writes and reads of the PIN table are refused, and one raw read
 runs at a time. Failures (refused request, no reply, checksum mismatch) are returned as errors and logged
 with the bytes received.
+
+## Development
+
+ESPHome and the tools of the CI checks, at the same versions, in a virtual environment:
+
+```sh
+python3 -m venv .venv
+.venv/bin/pip install -c .github/requirements-ci.txt esphome clang-format ruff
+```
+
+Then, with `.venv/bin` in the `PATH` (`source .venv/bin/activate`):
+
+```sh
+esphome compile kyo-alarm-example.yaml   # needs a secrets.yaml next to it, not in the repository
+git ls-files '*.cpp' '*.h' | xargs clang-format --dry-run --Werror
+ruff format --check . && ruff check .
+```
