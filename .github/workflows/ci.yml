@@ -20,8 +20,48 @@ env:
   EXAMPLE: kyo-alarm-example.yaml
 
 jobs:
+  # Each check runs only if the files it covers changed. A skipped job counts as passed for required checks, unlike a
+  # workflow filtered out with `paths`
+  changes:
+    name: Find the changed files
+    runs-on: ubuntu-latest
+    outputs:
+      cpp: ${{ steps.filter.outputs.cpp }}
+      python: ${{ steps.filter.outputs.python }}
+      example: ${{ steps.filter.outputs.example }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Match the changed files
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # Everything runs when started by hand, when the base is unknown, or when the CI itself changed
+          all=false
+          if [[ "${EVENT}" == workflow_dispatch || ! "${BASE}" =~ [1-9a-f] ]]; then
+            all=true
+          else
+            changed=$(git diff --name-only "${BASE}" HEAD)
+            echo "Changed files:" && echo "${changed}"
+            grep -qE '^\.github/(workflows/ci\.yml|requirements-ci\.txt)$' <<< "${changed}" && all=true
+          fi
+          match() {
+            [[ "${all}" == true ]] || grep -qE "$1" <<< "${changed}" && echo true || echo false
+          }
+          {
+            echo "cpp=$(match '\.(cpp|h)$|^\.clang-format$')"
+            echo "python=$(match '\.py$|^pyproject\.toml$')"
+            echo "example=$(match '^components/|^kyo-alarm-example\.yaml$')"
+          } | tee -a "${GITHUB_OUTPUT}"
+
   format:
     name: Check the C++ formatting
+    needs: changes
+    if: needs.changes.outputs.cpp == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -38,6 +78,8 @@ jobs:
 
   ruff:
     name: Check the Python code
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -58,6 +100,8 @@ jobs:
 
   example:
     name: Validate and compile the example
+    needs: changes
+    if: needs.changes.outputs.example == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
