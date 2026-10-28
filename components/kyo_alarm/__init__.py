@@ -9,7 +9,7 @@ CODEOWNERS = ["@lcavalli"]
 DEPENDENCIES = ["uart"]
 MULTI_CONF = True
 
-CONF_CLOCK_SYNC_INTERVAL = "clock_sync_interval"
+CONF_CLOCK_MAX_DRIFT = "clock_max_drift"
 CONF_KYO_ALARM_ID = "kyo_alarm_id"
 CONF_REQUEST = "request"
 CONF_ZONE = "zone"
@@ -80,9 +80,10 @@ CONFIG_SCHEMA = (
             cv.GenerateID(): cv.declare_id(KyoAlarmComponent),
             cv.Optional(CONF_MODEL, default="KYO32G"): cv.one_of(*MODELS, upper=True),
             cv.Optional(CONF_TIME_ID): cv.use_id(time.RealTimeClock),
-            cv.Optional(CONF_CLOCK_SYNC_INTERVAL, default="24h"): cv.All(
-                cv.positive_time_period_milliseconds,
-                cv.Range(max=cv.TimePeriod(days=7)),
+            # The panel clock has a resolution of one second. At most 30 minutes, so that DST changes are corrected
+            cv.Optional(CONF_CLOCK_MAX_DRIFT, default="30s"): cv.All(
+                cv.positive_time_period_seconds,
+                cv.Range(min=cv.TimePeriod(seconds=5), max=cv.TimePeriod(minutes=30)),
             ),
         }
     )
@@ -111,7 +112,7 @@ async def to_code(config):
 
     if time_id := config.get(CONF_TIME_ID):
         cg.add(var.set_time(await cg.get_variable(time_id)))
-        cg.add(var.set_clock_sync_interval(config[CONF_CLOCK_SYNC_INTERVAL]))
+        cg.add(var.set_clock_max_drift(config[CONF_CLOCK_MAX_DRIFT]))
 
 
 @automation.register_action(

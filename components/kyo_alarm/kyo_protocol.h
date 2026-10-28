@@ -49,6 +49,7 @@ static const uint16_t KYO_REG_CTRL_PARTITIONS = 0xf000;
 static const uint8_t KYO_REG_CTRL_PARTITIONS_SIZE = 4;
 static const uint16_t KYO_REG_ZONE_BYPASS = 0xf001;
 static const uint8_t KYO_REG_ZONE_BYPASS_SIZE = 8;
+// Panel clock, also readable: day, month, year - 2000, hour, minute, second (binary, local time)
 static const uint16_t KYO_REG_DATETIME = 0xf003;
 static const uint8_t KYO_REG_DATETIME_SIZE = 6;
 static const uint16_t KYO_REG_RESET = 0xf005;

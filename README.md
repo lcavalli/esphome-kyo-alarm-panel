@@ -107,7 +107,7 @@ one `kyo_alarm` hub, set `kyo_alarm_id` on each platform.
 | `model` | Panel model, currently `KYO32G`. |
 | `update_interval` | Status polling interval, default `1s`. |
 | `time_id` | Time source used to set the panel clock. |
-| `clock_sync_interval` | Minimum interval between two writes of the panel clock, default `24h`, at most `7d`. The clock is also set on the first time sync after boot and when the UTC offset changes (DST); failed writes are retried on the next time sync. |
+| `clock_max_drift` | At every time sync the panel clock is read, and set only when it differs from the time source by more than this, default `30s`, from `5s` to `30min`. DST changes are corrected the same way; failed reads and writes are retried on the next time sync. |
 
 ### Platforms
 
@@ -116,7 +116,7 @@ one `kyo_alarm` hub, set `kyo_alarm_id` on each platform.
 | `alarm_control_panel` | The panel entity, with `partitions` (`away`, `home`, `night`, `vacation`), `requires_code` and `requires_code_to_arm`. Arming modes without partitions are not offered. |
 | `binary_sensor` | `communication` (off after 3 failed requests, see [Communication loss](#communication-loss)); warnings `mains_failure`, `bpi_missing`, `fuse_fault`, `low_battery`, `phone_line_fault`, `default_codes`, `wireless_fault`; tampers `tamper_zone`, `tamper_false_key`, `tamper_bpi`, `tamper_system`, `tamper_rf_jam`, `tamper_wireless`; `zones`, a list of `zone` with `sensor`, `tamper`, `alarm_memory`, `tamper_memory`. |
 | `switch` | `zones`, a list of `zone` with `bypass`. |
-| `button` | `reset_memory`, resets alarm and tamper memories; `sync_clock`, sets the panel clock from the time source now, regardless of `clock_sync_interval` (requires `time_id` on the hub). |
+| `button` | `reset_memory`, resets alarm and tamper memories; `sync_clock`, sets the panel clock from the time source now, regardless of `clock_max_drift` (requires `time_id` on the hub). |
 | `text_sensor` | `panel_model`, `firmware_version`. |
 
 ### Alarm control panel states

@@ -1,5 +1,7 @@
 #include "kyo_alarm.h"
 
+#include <cinttypes>
+#include <cstdlib>
 #include <cstring>
 
 #include "esphome/core/log.h"
@@ -63,8 +65,8 @@ void KyoAlarmComponent::dump_config() {
 #endif
 #ifdef USE_TIME
   if (this->time_ != nullptr)
-    ESP_LOGCONFIG(TAG, "  Panel clock synchronized with time source every %" PRIu32 "s",
-                  this->clock_sync_interval_ / 1000);
+    ESP_LOGCONFIG(TAG, "  Panel clock synchronized with time source when off by more than %" PRIu32 "s",
+                  this->clock_max_drift_);
 #endif
   for (auto *listener : this->listeners_)
     listener->dump_config();
@@ -226,24 +228,44 @@ void KyoAlarmComponent::sync_clock(ResultCallback &&callback) {
       callback(false);
     return;
   }
-  int32_t timezone_offset = ESPTime::timezone_offset();
-  this->set_datetime(this->time_->now(), [this, timezone_offset, callback = std::move(callback)](bool success) {
-    if (success) {
-      this->clock_synced_ = true;
-      this->clock_synced_at_ = millis();
-      this->clock_timezone_offset_ = timezone_offset;
-    }
-    if (callback)
-      callback(success);
-  });
+  this->set_datetime(this->time_->now(), std::move(callback));
 }
 
 void KyoAlarmComponent::on_time_sync_() {
-  // The time source syncs every few minutes: write the panel clock only the first time, once per interval and
-  // when the UTC offset changes (DST), to limit writes to the panel
-  if (this->clock_synced_ && ESPTime::timezone_offset() == this->clock_timezone_offset_ &&
-      millis() - this->clock_synced_at_ < this->clock_sync_interval_)
+  // The time source syncs every few minutes: read the panel clock and write it only when it drifts, to limit
+  // writes to the panel. A DST change is a drift of one hour
+  this->push_back_(this->make_read_(KYO_REG_DATETIME, KYO_REG_DATETIME_SIZE, [this](bool success, const uint8_t *data) {
+    if (success)
+      this->handle_datetime_(data);
+  }));
+}
+
+void KyoAlarmComponent::handle_datetime_(const uint8_t *data) {
+  ESPTime now = this->time_->now();
+  if (!now.is_valid())
     return;
+  // Both clocks are local time: compare them as if they were UTC, so that the time zone does not matter
+  ESPTime panel = now;
+  panel.day_of_month = data[0];
+  panel.month = data[1];
+  panel.year = 2000 + data[2];
+  panel.hour = data[3];
+  panel.minute = data[4];
+  panel.second = data[5];
+  if (!panel.is_valid(false, false)) {
+    ESP_LOGW(TAG, "Invalid panel clock %02u/%02u/%02u %02u:%02u:%02u, setting it", data[0], data[1], data[2], data[3],
+             data[4], data[5]);
+    this->sync_clock();
+    return;
+  }
+  panel.recalc_timestamp_utc(false);
+  now.recalc_timestamp_utc(false);
+  int64_t drift = int64_t(panel.timestamp) - int64_t(now.timestamp);
+  if (std::abs(drift) <= int64_t(this->clock_max_drift_)) {
+    ESP_LOGD(TAG, "Panel clock off by %" PRId64 " s", drift);
+    return;
+  }
+  ESP_LOGI(TAG, "Panel clock off by %" PRId64 " s, setting it", drift);
   this->sync_clock();
 }
 #endif
