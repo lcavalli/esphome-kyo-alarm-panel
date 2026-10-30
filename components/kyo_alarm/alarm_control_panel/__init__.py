@@ -29,18 +29,32 @@ def partition_mask(value):
     return cv.hex_uint8_t(value)
 
 
+def validate_partitions(config):
+    """Away and vacation both arm total: with the same partitions, the panel status could not tell them apart."""
+    if config.get(CONF_VACATION) == config[CONF_AWAY]:
+        raise cv.Invalid(
+            f"'{CONF_VACATION}' and '{CONF_AWAY}' both arm total, they must arm different partitions",
+            path=[CONF_VACATION],
+        )
+    return config
+
+
 CONFIG_SCHEMA = alarm_control_panel.alarm_control_panel_schema(
     KyoAlarmControlPanel
 ).extend(
     {
         cv.GenerateID(CONF_KYO_ALARM_ID): cv.use_id(KyoAlarmComponent),
-        cv.Optional(CONF_PARTITIONS, default={}): cv.Schema(
-            {
-                cv.Optional(CONF_AWAY, default=0xFF): partition_mask,
-                cv.Optional(CONF_HOME): partition_mask,
-                cv.Optional(CONF_NIGHT): partition_mask,
-                cv.Optional(CONF_VACATION): partition_mask,
-            }
+        # Arming type of each mode: away and vacation total, home partial, night partial with no delay
+        cv.Optional(CONF_PARTITIONS, default={}): cv.All(
+            cv.Schema(
+                {
+                    cv.Optional(CONF_AWAY, default=0xFF): partition_mask,
+                    cv.Optional(CONF_HOME): partition_mask,
+                    cv.Optional(CONF_NIGHT): partition_mask,
+                    cv.Optional(CONF_VACATION): partition_mask,
+                }
+            ),
+            validate_partitions,
         ),
         cv.Optional(CONF_REQUIRES_CODE, default=True): cv.boolean,
         cv.Optional(CONF_REQUIRES_CODE_TO_ARM, default=True): cv.boolean,

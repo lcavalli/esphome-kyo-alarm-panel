@@ -39,36 +39,37 @@ void KyoAlarmControlPanel::control(const AlarmControlPanelCall &call) {
     return;
   }
 
-  uint8_t arm = 0;
-  uint8_t disarm = 0;
+  KyoPartitionControl control;
   switch (*state) {
     case ACP_STATE_ARMED_AWAY:
-      arm = this->away_partitions_;
+      control.arm_total = this->away_partitions_;
       break;
     case ACP_STATE_ARMED_HOME:
-      arm = this->home_partitions_;
+      control.arm_partial = this->home_partitions_;
       break;
     case ACP_STATE_ARMED_NIGHT:
-      arm = this->night_partitions_;
+      control.arm_partial_no_delay = this->night_partitions_;
       break;
     case ACP_STATE_ARMED_VACATION:
-      arm = this->vacation_partitions_;
+      control.arm_total = this->vacation_partitions_;
       break;
     case ACP_STATE_DISARMED:
-      disarm = 0xff;
+      control.disarm = 0xff;
       break;
     default:
       ESP_LOGW(TAG, "Unsupported state %s", LOG_STR_ARG(alarm_control_panel_state_to_string(*state)));
       return;
   }
-  if (*state != ACP_STATE_DISARMED && arm == 0) {
-    ESP_LOGW(TAG, "No partitions configured for %s", LOG_STR_ARG(alarm_control_panel_state_to_string(*state)));
+  // Arming none of the panel partitions would only disarm the others
+  if (*state != ACP_STATE_DISARMED && (control.arm() & this->parent_->get_status().partitions) == 0) {
+    ESP_LOGW(TAG, "No partitions of the panel configured for %s",
+             LOG_STR_ARG(alarm_control_panel_state_to_string(*state)));
     return;
   }
 
   bool code_needed = *state == ACP_STATE_DISARMED ? this->get_requires_code() : this->get_requires_code_to_arm();
   if (!code_needed) {
-    this->execute_(*state, arm, disarm);
+    this->execute_(*state, control);
     return;
   }
 
@@ -78,13 +79,18 @@ void KyoAlarmControlPanel::control(const AlarmControlPanelCall &call) {
     return;
   }
   AlarmControlPanelState target = *state;
-  this->parent_->verify_code(code->c_str(), [this, target, arm, disarm](bool valid) {
+  this->parent_->verify_code(code->c_str(), [this, target, control](bool valid) {
     if (valid)
-      this->execute_(target, arm, disarm);
+      this->execute_(target, control);
   });
 }
 
-void KyoAlarmControlPanel::execute_(AlarmControlPanelState target, uint8_t arm, uint8_t disarm) {
+void KyoAlarmControlPanel::execute_(AlarmControlPanelState target, KyoPartitionControl control) {
+  // A mode sets the whole panel: partitions armed now and not part of the mode are disarmed in the same write.
+  // Partitions of the mode armed with another type are switched to the mode type without disarming them first.
+  if (target != ACP_STATE_DISARMED)
+    control.disarm = this->parent_->get_status().armed() & ~control.arm();
+
   AlarmControlPanelState previous = this->get_state();
   this->in_transition_ = true;
   this->target_state_ = target;
@@ -92,7 +98,7 @@ void KyoAlarmControlPanel::execute_(AlarmControlPanelState target, uint8_t arm, 
   this->transition_started_ = millis();
   this->publish_state(target == ACP_STATE_DISARMED ? ACP_STATE_DISARMING : ACP_STATE_ARMING);
 
-  this->parent_->control_partitions(arm, disarm, [this, previous](bool success) {
+  this->parent_->control_partitions(control, [this, previous](bool success) {
     if (!success) {
       // Go back to the actual panel state, or to the state before the command if it is unknown (communication lost)
       this->in_transition_ = false;
@@ -123,17 +129,25 @@ AlarmControlPanelState KyoAlarmControlPanel::compute_state_(const KyoAlarmStatus
   if (status.realtime_valid && (status.partition_alarm & partitions) != 0)
     return ACP_STATE_TRIGGERED;
 
-  uint8_t armed = status.armed();
-  if (armed == 0)
+  if (status.armed() == 0)
     return ACP_STATE_DISARMED;
-  if (armed == (this->away_partitions_ & partitions))
-    return ACP_STATE_ARMED_AWAY;
-  if (this->home_partitions_ != 0 && armed == (this->home_partitions_ & partitions))
+
+  // A mode matches when its partitions, and no others, are armed with its type
+  uint8_t total = status.armed_total & partitions;
+  uint8_t partial = status.armed_partial & partitions;
+  uint8_t partial_no_delay = status.armed_partial_no_delay & partitions;
+  if (partial == 0 && partial_no_delay == 0) {
+    if (total == (this->away_partitions_ & partitions))
+      return ACP_STATE_ARMED_AWAY;
+    if (this->vacation_partitions_ != 0 && total == (this->vacation_partitions_ & partitions))
+      return ACP_STATE_ARMED_VACATION;
+  }
+  if (this->home_partitions_ != 0 && total == 0 && partial_no_delay == 0 &&
+      partial == (this->home_partitions_ & partitions))
     return ACP_STATE_ARMED_HOME;
-  if (this->night_partitions_ != 0 && armed == (this->night_partitions_ & partitions))
+  if (this->night_partitions_ != 0 && total == 0 && partial == 0 &&
+      partial_no_delay == (this->night_partitions_ & partitions))
     return ACP_STATE_ARMED_NIGHT;
-  if (this->vacation_partitions_ != 0 && armed == (this->vacation_partitions_ & partitions))
-    return ACP_STATE_ARMED_VACATION;
   // Armed from a keypad with a combination not matching any mode
   return ACP_STATE_ARMED_CUSTOM_BYPASS;
 }
@@ -141,10 +155,10 @@ AlarmControlPanelState KyoAlarmControlPanel::compute_state_(const KyoAlarmStatus
 void KyoAlarmControlPanel::dump_config() {
   ESP_LOGCONFIG(TAG,
                 "  Alarm control panel '%s'\n"
-                "    Away partitions: 0x%02X\n"
-                "    Home partitions: 0x%02X\n"
-                "    Night partitions: 0x%02X\n"
-                "    Vacation partitions: 0x%02X\n"
+                "    Away partitions (total): 0x%02X\n"
+                "    Home partitions (partial): 0x%02X\n"
+                "    Night partitions (partial, no delay): 0x%02X\n"
+                "    Vacation partitions (total): 0x%02X\n"
                 "    Requires code: %s\n"
                 "    Requires code to arm: %s",
                 this->get_name().c_str(), this->away_partitions_, this->home_partitions_, this->night_partitions_,

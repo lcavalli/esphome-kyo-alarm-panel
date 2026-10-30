@@ -55,6 +55,13 @@ static const uint8_t KYO_REG_DATETIME_SIZE = 6;
 static const uint16_t KYO_REG_RESET = 0xf005;
 static const uint8_t KYO_REG_RESET_SIZE = 2;
 
+// Partition control register layout: partition bitmasks, in the order of the first bytes of the status register.
+// Each bit set acts on its partition, partitions with no bit set are left as they are.
+static const size_t KYO_CTRL_ARM_TOTAL = 0;
+static const size_t KYO_CTRL_ARM_PARTIAL = 1;
+static const size_t KYO_CTRL_ARM_PARTIAL_NO_DELAY = 2;
+static const size_t KYO_CTRL_DISARM = 3;
+
 // Real-time status register layout
 static const size_t KYO_RT_ZONE_ACTIVE = 0;  // 4 bytes zone bitmap
 static const size_t KYO_RT_ZONE_TAMPER = 4;  // 4 bytes zone bitmap

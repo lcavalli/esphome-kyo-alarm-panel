@@ -7,7 +7,8 @@
 
 namespace esphome::kyo_alarm {
 
-/// Alarm control panel for the whole panel, each arming mode maps to a set of partitions.
+/// Alarm control panel for the whole panel, each arming mode maps to a set of partitions and an arming type:
+/// away and vacation arm total, home arms partial, night arms partial with no entry delay.
 class KyoAlarmControlPanel : public alarm_control_panel::AlarmControlPanel,
                              public KyoAlarmListener,
                              public Parented<KyoAlarmComponent> {
@@ -30,7 +31,7 @@ class KyoAlarmControlPanel : public alarm_control_panel::AlarmControlPanel,
 
  protected:
   void control(const alarm_control_panel::AlarmControlPanelCall &call) override;
-  void execute_(alarm_control_panel::AlarmControlPanelState target, uint8_t arm, uint8_t disarm);
+  void execute_(alarm_control_panel::AlarmControlPanelState target, KyoPartitionControl control);
   alarm_control_panel::AlarmControlPanelState compute_state_(const KyoAlarmStatus &status) const;
 
   uint8_t away_partitions_{0xff};

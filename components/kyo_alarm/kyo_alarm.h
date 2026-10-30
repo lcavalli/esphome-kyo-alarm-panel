@@ -68,6 +68,18 @@ struct KyoAlarmStatus {
   optional<uint32_t> get(StatusField field) const;
 };
 
+/// Partitions to arm or disarm with KyoAlarmComponent::control_partitions() (bit 0 is partition 1).
+struct KyoPartitionControl {
+  uint8_t arm_total{0};
+  uint8_t arm_partial{0};
+  /// Partial arming with entry delays set to 0
+  uint8_t arm_partial_no_delay{0};
+  uint8_t disarm{0};
+
+  /// Partitions armed with any type.
+  uint8_t arm() const { return this->arm_total | this->arm_partial | this->arm_partial_no_delay; }
+};
+
 /// Implemented by entities that register with KyoAlarmComponent to receive status updates.
 class KyoAlarmListener {
  public:
@@ -108,8 +120,8 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
 
   /// Check `code` against the user PINs stored in the panel.
   void verify_code(const char *code, std::function<void(bool valid)> &&callback);
-  /// Arm the `arm` partitions (total mode) and disarm the `disarm` partitions.
-  void control_partitions(uint8_t arm, uint8_t disarm, ResultCallback &&callback = nullptr);
+  /// Arm and disarm partitions in a single write, partitions not in `control` are left as they are.
+  void control_partitions(const KyoPartitionControl &control, ResultCallback &&callback = nullptr);
   /// Bypass (exclude) or restore a zone, `zone` is 0-based.
   void set_zone_bypass(uint8_t zone, bool bypass, ResultCallback &&callback = nullptr);
   /// Reset the alarm and tamper memories of all partitions.
