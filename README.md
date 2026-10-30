@@ -143,11 +143,11 @@ partitions:
     total: [4]
 ```
 
-- Configure the modes as the arming modes programmed in the panel (keypad modes A to D, Enter for all the
-  partitions), so that arming from a keypad is reported as the right mode. To find out what a keypad mode does, arm
-  the panel with it and read the status register with a [raw read](#raw-reads-diagnostics),
-  `request: "F0 02 15 12 00"`: the first four bytes of the reply are the partitions armed total, partial and partial
-  with no delay, and the disarmed ones. `09 00 00 F6` is partitions 1 and 4 armed total.
+- Configure the modes as the arming modes programmed in the panel, so that arming from a keypad is reported as the
+  right mode. To find out what an arming mode of the panel does, arm the panel with it and read the status register
+  with a [raw read](#raw-reads-diagnostics), `request: "F0 02 15 12 00"`: the first four bytes of the reply are the
+  partitions armed total, partial and partial with no delay, and the disarmed ones. `09 00 00 F6` is partitions 1
+  and 4 armed total.
 - `away` arms all the partitions total unless configured. `home`, `night` and `vacation` are offered in Home
   Assistant only when configured.
 - A partition can only have one arming type in a mode. Modes arming the same partitions with the same types cannot

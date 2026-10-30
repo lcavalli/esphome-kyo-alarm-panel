@@ -63,9 +63,9 @@ alarm_control_panel:
     # A list or a bitmask (bit 0 is partition 1) arms total; partitions can also be given by arming type
     # (total, partial, partial_no_delay), see the README
     partitions:
-      away: [1, 2, 3, 4]  # IIII, Enter on the keypad
-      home: [1, 4]        # IDDI, keypad mode A
-      night: 0x0d         # IDII, keypad mode B
+      away: [1, 2, 3, 4]  # IIII
+      home: [1, 4]        # IDDI
+      night: 0x0d         # IDII
     # Codes are checked against the user PINs stored in the panel
     requires_code: true
     requires_code_to_arm: true
