@@ -59,11 +59,12 @@ kyo_alarm:
 alarm_control_panel:
   - platform: kyo_alarm
     name: "Alarm"
-    # Partitions armed by each mode, as a list or a bitmask (bit 0 is partition 1)
+    # Partitions armed by each mode, as a list or a bitmask (bit 0 is partition 1), with the partition status shown
+    # by the keypad (I armed, D disarmed). Away arms total, home partial, night partial with no delay
     partitions:
-      away: [1, 2, 3, 4]  # total
-      home: [1, 4]        # partial
-      night: 0x0d         # partial with no delay, partitions 1, 3 and 4
+      away: [1, 2, 3, 4]  # IIII, Enter on the keypad
+      home: [1, 4]        # IDDI, keypad mode A
+      night: 0x0d         # IDII, keypad mode B
     # Codes are checked against the user PINs stored in the panel
     requires_code: true
     requires_code_to_arm: true
