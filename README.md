@@ -45,10 +45,12 @@ kyo_alarm:
 alarm_control_panel:
   - platform: kyo_alarm
     name: "Alarm"
-    partitions:
-      away: [1, 2, 3, 4]      # default: all partitions
+    partitions:               # see Arming modes
+      away: [1, 2, 3, 4]      # armed total, default: all partitions
       home: [1, 4]
-      night: 0x0d             # bitmask, bit 0 is partition 1
+      night:                  # by arming type
+        partial_no_delay: 0x05  # bitmask, bit 0 is partition 1
+        total: [4]
       # vacation: [...]
     requires_code: true       # codes are checked against the PINs stored in the panel
     requires_code_to_arm: true
@@ -113,17 +115,57 @@ one `kyo_alarm` hub, set `kyo_alarm_id` on each platform.
 
 | Platform | Keys |
 | --- | --- |
-| `alarm_control_panel` | The panel entity, with `partitions` (`away`, `home`, `night`, `vacation`), `requires_code` and `requires_code_to_arm`. Arming modes without partitions are not offered. |
+| `alarm_control_panel` | The panel entity, with `partitions` (`away`, `home`, `night`, `vacation`, see [Arming modes](#arming-modes)), `requires_code` and `requires_code_to_arm`. |
 | `binary_sensor` | `communication` (off after 3 failed requests, see [Communication loss](#communication-loss)); warnings `mains_failure`, `bpi_missing`, `fuse_fault`, `low_battery`, `phone_line_fault`, `default_codes`, `wireless_fault`; tampers `tamper_zone`, `tamper_false_key`, `tamper_bpi`, `tamper_system`, `tamper_rf_jam`, `tamper_wireless`; `zones`, a list of `zone` with `sensor`, `tamper`, `alarm_memory`, `tamper_memory`. |
 | `switch` | `zones`, a list of `zone` with `bypass`. |
 | `button` | `reset_memory`, resets alarm and tamper memories; `sync_clock`, sets the panel clock from the time source now, regardless of `clock_max_drift` (requires `time_id` on the hub). |
 | `text_sensor` | `panel_model`, `firmware_version`. |
 
+### Arming modes
+
+Each arming mode of the alarm control panel (`away`, `home`, `night`, `vacation`) arms a set of partitions, each with
+one of the arming types of the panel:
+
+| Arming type | Key | Effect, as programmed in the panel |
+| --- | --- | --- |
+| Total | `total` | All the zones of the partition are armed. |
+| Partial | `partial` | Zones programmed as internal are not armed. |
+| Partial with no delay | `partial_no_delay` | As partial, and delayed zones trigger the alarm with no entry delay. |
+
+A mode is a list of partition numbers or a bitmask (bit 0 is partition 1), armed total, or a map of partitions by
+arming type:
+
+```yaml
+partitions:
+  away: [1, 2, 3, 4]          # all total
+  night:
+    partial_no_delay: [1, 3]
+    total: [4]
+```
+
+- Configure the modes as the arming modes programmed in the panel, so that arming from a keypad is reported as the
+  right mode. To find out what an arming mode of the panel does, arm the panel with it and read the status register
+  with a [raw read](#raw-reads-diagnostics), `request: "F0 02 15 12 00"`: the first four bytes of the reply are the
+  partitions armed total, partial and partial with no delay, and the disarmed ones. `09 00 00 F6` is partitions 1
+  and 4 armed total.
+- `away` arms all the partitions total unless configured. `home`, `night` and `vacation` are offered in Home
+  Assistant only when configured.
+- A partition can only have one arming type in a mode. Modes arming the same partitions with the same types cannot
+  be told apart: the configuration shows a warning, and the panel is reported in the first of them (in the order
+  `away`, `home`, `night`, `vacation`).
+- A mode sets the whole panel: arming it arms its partitions with their arming type and, in the same command,
+  disarms the armed partitions that are not part of it. With `away: [1, 2]` and `home: {partial: [1]}`, switching
+  from away to home arms partition 1 partial and disarms partition 2.
+- Partitions already armed with another type are switched to their type in the mode without being disarmed first.
+  This has not been verified on a panel yet.
+- Partitions configured in a mode but not present in the panel are ignored; a mode with none of them is refused.
+
 ### Alarm control panel states
 
 - `triggered` when any partition is in alarm;
 - `disarmed` when no partition is armed;
-- `armed_away` / `armed_home` / `armed_night` / `armed_vacation` when the armed partitions match the mode;
+- `armed_away` / `armed_home` / `armed_night` / `armed_vacation` when the partitions of the mode, and no others, are
+  armed with their arming type;
 - `armed_custom_bypass` when the panel is armed (e.g. from a keypad) with a combination not matching any mode;
 - `arming` / `disarming` while a command is in progress;
 - `pending` until the panel status has been read.

@@ -174,11 +174,18 @@ void KyoAlarmComponent::verify_code(const char *code, std::function<void(bool va
   this->push_back_(std::move(read_first));
 }
 
-void KyoAlarmComponent::control_partitions(uint8_t arm, uint8_t disarm, ResultCallback &&callback) {
+void KyoAlarmComponent::control_partitions(const KyoPartitionControl &control, ResultCallback &&callback) {
+  uint8_t partitions = this->status_.partitions;
   uint8_t data[KYO_REG_CTRL_PARTITIONS_SIZE] = {};
-  data[0] = arm & this->status_.partitions;
-  data[3] = disarm & this->status_.partitions;
-  ESP_LOGD(TAG, "Arming partitions 0x%02X, disarming partitions 0x%02X", data[0], data[3]);
+  data[KYO_CTRL_ARM_TOTAL] = control.arm_total & partitions;
+  data[KYO_CTRL_ARM_PARTIAL] = control.arm_partial & partitions;
+  data[KYO_CTRL_ARM_PARTIAL_NO_DELAY] = control.arm_partial_no_delay & partitions;
+  // A partition both armed and disarmed is only armed: the panel was never tested with both bits set in one frame.
+  // If a partition ever has to be disarmed and armed again (e.g. to change its arm type), use two writes.
+  data[KYO_CTRL_DISARM] = control.disarm & ~control.arm() & partitions;
+  ESP_LOGD(TAG, "Arming partitions total 0x%02X, partial 0x%02X, partial no delay 0x%02X, disarming 0x%02X",
+           data[KYO_CTRL_ARM_TOTAL], data[KYO_CTRL_ARM_PARTIAL], data[KYO_CTRL_ARM_PARTIAL_NO_DELAY],
+           data[KYO_CTRL_DISARM]);
   this->enqueue_write_(KYO_REG_CTRL_PARTITIONS, data, sizeof(data), CTRL_PARTITIONS_TIMEOUT_MS, std::move(callback));
 }
 

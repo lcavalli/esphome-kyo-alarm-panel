@@ -59,7 +59,9 @@ kyo_alarm:
 alarm_control_panel:
   - platform: kyo_alarm
     name: "Alarm"
-    # Partitions armed by each mode, as a list or a bitmask (bit 0 is partition 1)
+    # Partitions armed by each mode, with the partition status shown by the keypad (I armed, D disarmed).
+    # A list or a bitmask (bit 0 is partition 1) arms total; partitions can also be given by arming type
+    # (total, partial, partial_no_delay), see the README
     partitions:
       away: [1, 2, 3, 4]  # IIII
       home: [1, 4]        # IDDI
