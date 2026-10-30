@@ -46,10 +46,12 @@ alarm_control_panel:
   - platform: kyo_alarm
     name: "Alarm"
     partitions:               # see Arming modes
-      away: [1, 2, 3, 4]      # total, default: all partitions
-      home: [1, 4]            # partial
-      night: 0x0d             # partial with no delay, as a bitmask (bit 0 is partition 1)
-      # vacation: [...]       # total, on partitions other than away's
+      away: [1, 2, 3, 4]      # armed total, default: all partitions
+      home: [1, 4]
+      night:                  # by arming type
+        partial_no_delay: 0x05  # bitmask, bit 0 is partition 1
+        total: [4]
+      # vacation: [...]
     requires_code: true       # codes are checked against the PINs stored in the panel
     requires_code_to_arm: true
 
@@ -121,23 +123,40 @@ one `kyo_alarm` hub, set `kyo_alarm_id` on each platform.
 
 ### Arming modes
 
-Each arming mode of the alarm control panel arms its `partitions` (a list of partition numbers or a bitmask, bit 0
-is partition 1) with one of the arming types of the panel:
+Each arming mode of the alarm control panel (`away`, `home`, `night`, `vacation`) arms a set of partitions, each with
+one of the arming types of the panel:
 
-| Mode | Arming type | Effect, as programmed in the panel |
+| Arming type | Key | Effect, as programmed in the panel |
 | --- | --- | --- |
-| `away` | Total | All the zones of the partitions are armed. |
-| `home` | Partial | Zones programmed as internal are not armed. |
-| `night` | Partial with no delay | As partial, and delayed zones trigger the alarm with no entry delay. |
-| `vacation` | Total | As `away`, on a different set of partitions. |
+| Total | `total` | All the zones of the partition are armed. |
+| Partial | `partial` | Zones programmed as internal are not armed. |
+| Partial with no delay | `partial_no_delay` | As partial, and delayed zones trigger the alarm with no entry delay. |
 
-- `away` arms all the partitions unless configured. `home`, `night` and `vacation` are offered in Home Assistant
-  only when configured; `vacation` must arm different partitions from `away`, or the two modes could not be told
-  apart.
-- A mode sets the whole panel: arming it arms its partitions with its type and, in the same command, disarms the
-  armed partitions that are not part of it. With `away: [1, 2]` and `home: [1]`, switching from away to home arms
-  partition 1 partial and disarms partition 2.
-- Partitions already armed with another type are switched to the type of the mode without being disarmed first.
+A mode is a list of partition numbers or a bitmask (bit 0 is partition 1), armed total, or a map of partitions by
+arming type:
+
+```yaml
+partitions:
+  away: [1, 2, 3, 4]          # all total
+  night:
+    partial_no_delay: [1, 3]
+    total: [4]
+```
+
+- Configure the modes as the arming modes programmed in the panel (keypad modes A to D, Enter for all the
+  partitions), so that arming from a keypad is reported as the right mode. To find out what a keypad mode does, arm
+  the panel with it and read the status register with a [raw read](#raw-reads-diagnostics),
+  `request: "F0 02 15 12 00"`: the first four bytes of the reply are the partitions armed total, partial and partial
+  with no delay, and the disarmed ones. `09 00 00 F6` is partitions 1 and 4 armed total.
+- `away` arms all the partitions total unless configured. `home`, `night` and `vacation` are offered in Home
+  Assistant only when configured.
+- A partition can only have one arming type in a mode. Modes arming the same partitions with the same types cannot
+  be told apart: the configuration shows a warning, and the panel is reported in the first of them (in the order
+  `away`, `home`, `night`, `vacation`).
+- A mode sets the whole panel: arming it arms its partitions with their arming type and, in the same command,
+  disarms the armed partitions that are not part of it. With `away: [1, 2]` and `home: {partial: [1]}`, switching
+  from away to home arms partition 1 partial and disarms partition 2.
+- Partitions already armed with another type are switched to their type in the mode without being disarmed first.
   This has not been verified on a panel yet.
 - Partitions configured in a mode but not present in the panel are ignored; a mode with none of them is refused.
 
@@ -146,7 +165,7 @@ is partition 1) with one of the arming types of the panel:
 - `triggered` when any partition is in alarm;
 - `disarmed` when no partition is armed;
 - `armed_away` / `armed_home` / `armed_night` / `armed_vacation` when the partitions of the mode, and no others, are
-  armed with the arming type of the mode;
+  armed with their arming type;
 - `armed_custom_bypass` when the panel is armed (e.g. from a keypad) with a combination not matching any mode;
 - `arming` / `disarming` while a command is in progress;
 - `pending` until the panel status has been read.

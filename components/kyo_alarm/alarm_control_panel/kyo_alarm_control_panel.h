@@ -7,18 +7,25 @@
 
 namespace esphome::kyo_alarm {
 
-/// Alarm control panel for the whole panel, each arming mode maps to a set of partitions and an arming type:
-/// away and vacation arm total, home arms partial, night arms partial with no entry delay.
+/// Alarm control panel for the whole panel, each arming mode arms a set of partitions, each with an arming type.
 class KyoAlarmControlPanel : public alarm_control_panel::AlarmControlPanel,
                              public KyoAlarmListener,
                              public Parented<KyoAlarmComponent> {
  public:
   KyoAlarmControlPanel();
 
-  void set_away_partitions(uint8_t partitions) { this->away_partitions_ = partitions; }
-  void set_home_partitions(uint8_t partitions) { this->home_partitions_ = partitions; }
-  void set_night_partitions(uint8_t partitions) { this->night_partitions_ = partitions; }
-  void set_vacation_partitions(uint8_t partitions) { this->vacation_partitions_ = partitions; }
+  void set_away_partitions(uint8_t total, uint8_t partial, uint8_t partial_no_delay) {
+    this->away_ = {total, partial, partial_no_delay};
+  }
+  void set_home_partitions(uint8_t total, uint8_t partial, uint8_t partial_no_delay) {
+    this->home_ = {total, partial, partial_no_delay};
+  }
+  void set_night_partitions(uint8_t total, uint8_t partial, uint8_t partial_no_delay) {
+    this->night_ = {total, partial, partial_no_delay};
+  }
+  void set_vacation_partitions(uint8_t total, uint8_t partial, uint8_t partial_no_delay) {
+    this->vacation_ = {total, partial, partial_no_delay};
+  }
   void set_requires_code(bool requires_code) { this->requires_code_ = requires_code; }
   void set_requires_code_to_arm(bool requires_code_to_arm) { this->requires_code_to_arm_ = requires_code_to_arm; }
 
@@ -34,10 +41,11 @@ class KyoAlarmControlPanel : public alarm_control_panel::AlarmControlPanel,
   void execute_(alarm_control_panel::AlarmControlPanelState target, KyoPartitionControl control);
   alarm_control_panel::AlarmControlPanelState compute_state_(const KyoAlarmStatus &status) const;
 
-  uint8_t away_partitions_{0xff};
-  uint8_t home_partitions_{0};
-  uint8_t night_partitions_{0};
-  uint8_t vacation_partitions_{0};
+  // Partitions armed by each mode, by arming type (disarm is not used)
+  KyoPartitionControl away_{0xff};
+  KyoPartitionControl home_{};
+  KyoPartitionControl night_{};
+  KyoPartitionControl vacation_{};
   bool requires_code_{true};
   bool requires_code_to_arm_{true};
 
