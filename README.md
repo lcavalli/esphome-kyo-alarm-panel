@@ -1,7 +1,7 @@
 # ESPHome Kyo Alarm External Component
 
-ESPHome external component for Bentel KYO alarm panels connected over RS-232 (9600 8E1).
-It is the successor of [esp-kyo-alarm-generic](https://github.com/lcavalli/esp-kyo-alarm-generic).
+Simple ESPHome external component for Bentel KYO 32G alarm panels connected over RS-232 (9600 8E1).
+It is the successor of [esp-kyo-alarm-generic](https://github.com/lcavalli/esp-kyo-alarm-generic) compatibile with latest ESPHome releases.
 
 *This project is not related to or endorsed by the KYO alarm manufacturer. Any intervention on the alarm
 system must be performed by qualified personnel. The software is provided "as is", without warranty of any kind.*
