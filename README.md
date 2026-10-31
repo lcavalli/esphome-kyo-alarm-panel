@@ -280,3 +280,23 @@ esphome compile kyo-alarm-example.yaml   # needs a secrets.yaml next to it, not 
 git ls-files '*.cpp' '*.h' | xargs clang-format --dry-run --Werror
 ruff format --check . && ruff check .
 ```
+
+## Comparison with ESPKyoGate
+
+[ESPKyoGate](https://github.com/lorenzo-deluca/espkyogate) by Lorenzo De Luca is another awesome ESPHome component for
+Bentel KYO panels. The main differences:
+
+| | This component | ESPKyoGate |
+| --- | --- | --- |
+| Panel models | KYO32G. | KYO32G, KYO32 (non-G), KYO8G, KYO8W, KYO8, KYO4. |
+| Alarm control panel | One for the whole panel. Each arming mode arms a set of partitions, each with its own arming type, matching the arming modes programmed in the panel. | One for each partition, with fixed arming types (away is total, home is partial, night is partial with no delay), and buttons that arm several partitions together. |
+| Codes | Checked against the PINs stored in the panel. | A list in the YAML configuration. |
+| Clock | Kept in sync automatically, set only when it drifts; also from a button. | Set from a button. |
+| Zone bypass | A switch for each zone. | Include and exclude buttons, and a bypass binary sensor. |
+| Outputs | No. | State, activation and pulse. |
+| Siren state | No. | Yes. |
+| Event log | No. | Read from a button and written to the ESPHome logs. |
+| Programming data | No. | Zone and output names, zone types and partitions, entry and exit delays and siren timer of each partition. |
+| Polling | Always on. | A switch stops it, to free the serial port. |
+
+Use the one that best fits your needs!
