@@ -74,7 +74,7 @@ def final_validate_zones(config):
     return config
 
 
-CONFIG_SCHEMA = (
+CONFIG_SCHEMA = cv.All(
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(KyoAlarmComponent),
@@ -88,7 +88,10 @@ CONFIG_SCHEMA = (
         }
     )
     .extend(cv.polling_component_schema("1s"))
-    .extend(uart.UART_DEVICE_SCHEMA)
+    .extend(uart.UART_DEVICE_SCHEMA),
+    # The platforms create their entities with the sub_* helpers (e.g. binary_sensor.sub_binary_sensors), added in
+    # ESPHome 2026.10.0. Without this check older versions fail during code generation with an AttributeError
+    cv.require_esphome_version(2026, 10, 0),
 )
 
 FINAL_VALIDATE_SCHEMA = uart.final_validate_device_schema(
