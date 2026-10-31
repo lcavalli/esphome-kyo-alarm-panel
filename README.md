@@ -25,6 +25,8 @@ following the design and directions of the author.
 
 ## Configuration
 
+Requires ESPHome 2026.10.0 or later.
+
 ```yaml
 uart:
   tx_pin: GPIO5
