@@ -97,6 +97,8 @@ text_sensor:
       name: "Panel model"
     firmware_version:
       name: "Firmware version"
+    partition_status:
+      name: "Partition status"   # see Configuring the arming modes
 ```
 
 Every entity accepts the full schema of its domain (`name`, `icon`, `internal`, filters, ...). With more than
@@ -119,7 +121,7 @@ one `kyo_alarm` hub, set `kyo_alarm_id` on each platform.
 | `binary_sensor` | `communication` (off after 3 failed requests, see [Communication loss](#communication-loss)); warnings `mains_failure`, `bpi_missing`, `fuse_fault`, `low_battery`, `phone_line_fault`, `default_codes`, `wireless_fault`; tampers `tamper_zone`, `tamper_false_key`, `tamper_bpi`, `tamper_system`, `tamper_rf_jam`, `tamper_wireless`; `zones`, a list of `zone` with `sensor`, `tamper`, `alarm_memory`, `tamper_memory`. |
 | `switch` | `zones`, a list of `zone` with `bypass`. |
 | `button` | `reset_memory`, resets alarm and tamper memories; `sync_clock`, sets the panel clock from the time source now, regardless of `clock_max_drift` (requires `time_id` on the hub). |
-| `text_sensor` | `panel_model`, `firmware_version`. |
+| `text_sensor` | `panel_model`, `firmware_version`; `partition_status`, the partitions armed with each arming type, see [Configuring the arming modes](#configuring-the-arming-modes). |
 
 ### Arming modes
 
@@ -144,10 +146,7 @@ partitions:
 ```
 
 - Configure the modes as the arming modes programmed in the panel, so that arming from a keypad is reported as the
-  right mode. To find out what an arming mode of the panel does, arm the panel with it and read the status register
-  with a [raw read](#raw-reads-diagnostics), `request: "F0 02 15 12 00"`: the first four bytes of the reply are the
-  partitions armed total, partial and partial with no delay, and the disarmed ones. `09 00 00 F6` is partitions 1
-  and 4 armed total.
+  right mode, see [Configuring the arming modes](#configuring-the-arming-modes).
 - `away` arms all the partitions total unless configured. `home`, `night` and `vacation` are offered in Home
   Assistant only when configured.
 - A partition can only have one arming type in a mode. Modes arming the same partitions with the same types cannot
@@ -159,6 +158,54 @@ partitions:
 - Partitions already armed with another type are switched to their type in the mode without being disarmed first.
   This has not been verified on a panel yet.
 - Partitions configured in a mode but not present in the panel are ignored; a mode with none of them is refused.
+
+### Configuring the arming modes
+
+The keypad only shows whether each partition is armed, not its arming type, and the arming modes are programmed in
+the panel by the installer. The `partition_status` text sensor shows what the panel reports, so that the modes can
+be copied into the configuration:
+
+```yaml
+text_sensor:
+  - platform: kyo_alarm
+    partition_status:
+      name: "Partition status"
+```
+
+Its state is the first four bytes of the status register (partitions armed total, partial and partial with no delay,
+and disarmed partitions, bit 0 is partition 1), followed by the partitions of the panel armed with each arming type,
+written as a mode of `partitions`:
+
+| State | Meaning |
+| --- | --- |
+| `00 00 00 FF (disarmed)` | No partition armed. |
+| `09 00 00 F6 (total: [1, 4])` | Partitions 1 and 4 armed total. |
+| `08 00 05 F2 (total: [4], partial_no_delay: [1, 3])` | Partition 4 armed total, 1 and 3 partial with no delay. |
+
+Arming the panel makes it operational: before each step, make sure the zones of the partitions being armed are at
+rest and that nobody walks through them, and disarm as soon as the state has been noted. Then:
+
+1. Add `partition_status` to the configuration, install it and check that, with the panel disarmed, the sensor shows
+   `(disarmed)`.
+2. Arm the panel from a keypad (or from the keys, remote controls or apps used every day) with each of its arming
+   modes, e.g. the total arming and the modes of the keypad keys. For each one, once the panel is armed, note the
+   state of the sensor, from Home Assistant or the device logs, then disarm the panel.
+3. Assign each arming mode of the panel to a mode of the alarm control panel (`away`, `home`, `night`, `vacation`)
+   and copy the noted partitions:
+
+   | Arming mode of the panel | Sensor state | Configuration |
+   | --- | --- | --- |
+   | Total | `0F 00 00 F0 (total: [1, 2, 3, 4])` | `away: [1, 2, 3, 4]` |
+   | Keypad key A | `09 00 00 F6 (total: [1, 4])` | `home: [1, 4]` |
+   | Keypad key B | `08 00 05 F2 (total: [4], partial_no_delay: [1, 3])` | `night: {total: [4], partial_no_delay: [1, 3]}` |
+
+   The text in parentheses is a valid mode between braces; when all the partitions are armed total, the list alone is
+   enough.
+4. Install the new configuration and repeat step 2: the alarm control panel must show the assigned mode for each
+   arming mode of the panel, not `armed_custom_bypass`. Then arm each mode from Home Assistant, and check on the
+   keypad and on the sensor that the panel is armed as with the keypad.
+
+The sensor can be removed afterwards, or kept to see how the panel is armed at any time.
 
 ### Alarm control panel states
 

@@ -107,6 +107,9 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
   void set_firmware_version_text_sensor(text_sensor::TextSensor *sensor) {
     this->firmware_version_text_sensor_ = sensor;
   }
+  void set_partition_status_text_sensor(text_sensor::TextSensor *sensor) {
+    this->partition_status_text_sensor_ = sensor;
+  }
 #endif
 #ifdef USE_TIME
   void set_time(time::RealTimeClock *time) { this->time_ = time; }
@@ -178,6 +181,9 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
   void handle_partitions_(const uint8_t *data);
   void handle_realtime_(const uint8_t *data);
   void handle_status_(const uint8_t *data);
+#ifdef USE_TEXT_SENSOR
+  void publish_partition_status_(const uint8_t *data);
+#endif
   void set_online_(bool online);
 #ifdef USE_TIME
   void on_time_sync_();
@@ -191,6 +197,7 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
 #ifdef USE_TEXT_SENSOR
   text_sensor::TextSensor *panel_model_text_sensor_{nullptr};
   text_sensor::TextSensor *firmware_version_text_sensor_{nullptr};
+  text_sensor::TextSensor *partition_status_text_sensor_{nullptr};
 #endif
 #ifdef USE_TIME
   time::RealTimeClock *time_{nullptr};
