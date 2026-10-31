@@ -9,6 +9,7 @@ DEPENDENCIES = ["kyo_alarm"]
 
 CONF_FIRMWARE_VERSION = "firmware_version"
 CONF_PANEL_MODEL = "panel_model"
+CONF_PARTITION_STATUS = "partition_status"
 
 CONFIG_SCHEMA = cv.Schema(
     {
@@ -20,6 +21,9 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_FIRMWARE_VERSION): text_sensor.text_sensor_schema(
             icon="mdi:memory", entity_category=ENTITY_CATEGORY_DIAGNOSTIC
         ),
+        cv.Optional(CONF_PARTITION_STATUS): text_sensor.text_sensor_schema(
+            icon="mdi:shield-lock-outline", entity_category=ENTITY_CATEGORY_DIAGNOSTIC
+        ),
     }
 )
 
@@ -29,3 +33,4 @@ async def to_code(config):
     text_sensors = text_sensor.sub_text_sensors(config)
     await text_sensors(CONF_PANEL_MODEL, hub.set_panel_model_text_sensor)
     await text_sensors(CONF_FIRMWARE_VERSION, hub.set_firmware_version_text_sensor)
+    await text_sensors(CONF_PARTITION_STATUS, hub.set_partition_status_text_sensor)

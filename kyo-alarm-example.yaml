@@ -124,3 +124,6 @@ text_sensor:
       name: "Panel model"
     firmware_version:
       name: "Firmware version"
+    # Partitions armed with each arming type, to configure the arming modes, see the README
+    partition_status:
+      name: "Partition status"

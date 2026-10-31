@@ -62,6 +62,7 @@ void KyoAlarmComponent::dump_config() {
 #ifdef USE_TEXT_SENSOR
   LOG_TEXT_SENSOR("  ", "Panel model", this->panel_model_text_sensor_);
   LOG_TEXT_SENSOR("  ", "Firmware version", this->firmware_version_text_sensor_);
+  LOG_TEXT_SENSOR("  ", "Partition status", this->partition_status_text_sensor_);
 #endif
 #ifdef USE_TIME
   if (this->time_ != nullptr)
@@ -521,8 +522,48 @@ void KyoAlarmComponent::handle_status_(const uint8_t *data) {
   this->status_.zone_alarm_memory = kyo_decode_zones(data + KYO_ST_ZONE_ALARM_MEMORY);
   this->status_.zone_tamper_memory = kyo_decode_zones(data + KYO_ST_ZONE_TAMPER_MEMORY);
   this->status_.status_valid = true;
+#ifdef USE_TEXT_SENSOR
+  if (this->partition_status_text_sensor_ != nullptr)
+    this->publish_partition_status_(data);
+#endif
   this->notify_listeners_();
 }
+
+#ifdef USE_TEXT_SENSOR
+void KyoAlarmComponent::publish_partition_status_(const uint8_t *data) {
+  // The first four bytes of the status register, as returned by a raw read, then the partitions of the panel armed
+  // with each arming type, in the format of the arming modes of the alarm control panel, e.g.
+  // "09 00 00 F6 (total: [1, 4])"
+  static const char *const TYPES[] = {"total", "partial", "partial_no_delay"};
+  char hex[format_hex_pretty_size(KYO_ST_DISARMED + 1)];
+  std::string text = format_hex_pretty_to(hex, data, KYO_ST_DISARMED + 1, ' ');
+  text += " (";
+  bool armed = false;
+  for (size_t type = KYO_ST_ARMED_TOTAL; type <= KYO_ST_ARMED_PARTIAL_NO_DELAY; type++) {
+    uint8_t partitions = data[type] & this->status_.partitions;
+    if (partitions == 0)
+      continue;
+    if (armed)
+      text += ", ";
+    text += TYPES[type];
+    text += ": [";
+    const char *separator = "";
+    for (uint8_t partition = 0; partition < KYO_MAX_PARTITIONS; partition++) {
+      if (partitions & (1 << partition)) {
+        text += separator;
+        text += char('1' + partition);
+        separator = ", ";
+      }
+    }
+    text += ']';
+    armed = true;
+  }
+  text += armed ? ")" : "disarmed)";
+  // Polled every update_interval: publish changes only
+  if (!this->partition_status_text_sensor_->has_state() || this->partition_status_text_sensor_->state != text)
+    this->partition_status_text_sensor_->publish_state(text);
+}
+#endif
 
 void KyoAlarmComponent::set_online_(bool online) {
   if (this->status_.online == online)
