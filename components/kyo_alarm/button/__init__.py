@@ -31,9 +31,7 @@ CONFIG_SCHEMA = cv.Schema(
             KyoResetMemoryButton, icon="mdi:alarm-light-off"
         ),
         cv.Optional(CONF_SYNC_CLOCK): button.button_schema(
-            KyoSyncClockButton,
-            icon="mdi:clock-check-outline",
-            entity_category=ENTITY_CATEGORY_CONFIG,
+            KyoSyncClockButton, icon="mdi:clock-check-outline"
         ),
     }
 )
