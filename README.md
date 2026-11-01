@@ -291,6 +291,7 @@ kyo_alarm:
           time: !lambda return event.time;
 ```
 
+Home Assistant receives every field as text, e.g. `number: '9'`: convert it with `| int` to compare it with a number.
 Then, e.g., a notification for each event:
 
 ```yaml
