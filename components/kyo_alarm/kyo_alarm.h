@@ -249,6 +249,7 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
   Request active_{};
   bool busy_{false};
   uint32_t sent_at_{0};
+  uint32_t completed_at_{0};
   std::array<uint8_t, KYO_MAX_FRAME_SIZE> rx_{};
   size_t rx_size_{0};
 

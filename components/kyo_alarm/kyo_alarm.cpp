@@ -22,6 +22,8 @@ static const uint16_t CTRL_PARTITIONS_TIMEOUT_MS = 1000;
 static const uint16_t ZONE_BYPASS_TIMEOUT_MS = 200;
 static const uint16_t DATETIME_TIMEOUT_MS = 200;
 static const uint16_t RESET_TIMEOUT_MS = 500;
+/// The panel ignores a request sent right after its previous reply
+static const uint16_t REQUEST_GAP_MS = 50;
 /// Consecutive failed requests before the panel is reported offline
 static const uint8_t MAX_FAILURES = 3;
 
@@ -118,10 +120,10 @@ void KyoAlarmComponent::update() {
 
 void KyoAlarmComponent::loop() {
   if (!this->busy_) {
-    if (this->queue_count_ > 0) {
-      this->start_request_();
-    } else {
+    if (this->queue_count_ == 0) {
       this->disable_loop();
+    } else if (millis() - this->completed_at_ >= REQUEST_GAP_MS) {
+      this->start_request_();
     }
     return;
   }
@@ -444,6 +446,7 @@ void KyoAlarmComponent::start_request_() {
 
 void KyoAlarmComponent::complete_request_(bool success) {
   this->busy_ = false;
+  this->completed_at_ = millis();
   const uint8_t *reply = this->rx_.data() + KYO_HEADER_SIZE;
   uint8_t reply_size = this->active_.reply_size;
 
@@ -583,12 +586,15 @@ void KyoAlarmComponent::handle_event_next_(uint8_t next) {
   if (this->events_busy_)
     return;
   if (!this->event_next_.has_value()) {
-    // Events logged before the first status read are not sent, only the last one is shown
-    this->event_next_ = next;
+    // Events logged before the first status read are not sent, only the last one is shown. The next slot is set once
+    // it has been read, otherwise it is read again at the next status poll
 #ifdef USE_TEXT_SENSOR
-    if (this->last_event_text_sensor_ != nullptr)
+    if (this->last_event_text_sensor_ != nullptr) {
       this->read_events_(next - 1, 1, true);
+      return;
+    }
 #endif
+    this->event_next_ = next;
     return;
   }
   // The next slot is not reset when the communication is lost: the events logged meanwhile are read once the panel
@@ -616,8 +622,7 @@ void KyoAlarmComponent::read_events_(uint8_t first, uint8_t count, bool silent) 
                                       this->events_count_ = count;
                                       this->events_index_ = 0;
                                       this->events_silent_ = silent;
-                                      if (!silent)
-                                        this->event_next_ = uint8_t(first + count);
+                                      this->event_next_ = uint8_t(first + count);
                                       this->process_events_();
                                     }));
 }
@@ -680,7 +685,7 @@ void KyoAlarmComponent::publish_event_() {
   }
 
   if (this->events_silent_) {
-    ESP_LOGD(TAG, "Last event: %s", text.c_str());
+    ESP_LOGI(TAG, "Last event: %s", text.c_str());
   } else {
     ESP_LOGI(TAG, "Event: %s", text.c_str());
   }
