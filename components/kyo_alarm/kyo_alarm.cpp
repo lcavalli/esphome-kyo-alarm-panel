@@ -6,6 +6,12 @@
 
 #include "esphome/core/log.h"
 
+#ifdef USE_KYO_ALARM_EVENT_LOG
+#include <algorithm>
+
+#include "kyo_event_texts.h"
+#endif
+
 namespace esphome::kyo_alarm {
 
 static const char *const TAG = "kyo_alarm";
@@ -63,6 +69,9 @@ void KyoAlarmComponent::dump_config() {
   LOG_TEXT_SENSOR("  ", "Panel model", this->panel_model_text_sensor_);
   LOG_TEXT_SENSOR("  ", "Firmware version", this->firmware_version_text_sensor_);
   LOG_TEXT_SENSOR("  ", "Partition status", this->partition_status_text_sensor_);
+#ifdef USE_KYO_ALARM_EVENT_LOG
+  LOG_TEXT_SENSOR("  ", "Last event", this->last_event_text_sensor_);
+#endif
 #endif
 #ifdef USE_TIME
   if (this->time_ != nullptr)
@@ -527,6 +536,9 @@ void KyoAlarmComponent::handle_status_(const uint8_t *data) {
     this->publish_partition_status_(data);
 #endif
   this->notify_listeners_();
+#ifdef USE_KYO_ALARM_EVENT_LOG
+  this->handle_event_next_(data[KYO_ST_EVENT_NEXT]);
+#endif
 }
 
 #ifdef USE_TEXT_SENSOR
@@ -535,8 +547,9 @@ void KyoAlarmComponent::publish_partition_status_(const uint8_t *data) {
   // with each arming type, in the format of the arming modes of the alarm control panel, e.g.
   // "09 00 00 F6 (total: [1, 4])"
   static const char *const TYPES[] = {"total", "partial", "partial_no_delay"};
-  char hex[format_hex_pretty_size(KYO_ST_DISARMED + 1)];
-  std::string text = format_hex_pretty_to(hex, data, KYO_ST_DISARMED + 1, ' ');
+  static const size_t SIZE = KYO_ST_DISARMED - KYO_ST_ARMED_TOTAL + 1;
+  char hex[format_hex_pretty_size(SIZE)];
+  std::string text = format_hex_pretty_to(hex, data + KYO_ST_ARMED_TOTAL, SIZE, ' ');
   text += " (";
   bool armed = false;
   for (size_t type = KYO_ST_ARMED_TOTAL; type <= KYO_ST_ARMED_PARTIAL_NO_DELAY; type++) {
@@ -545,7 +558,7 @@ void KyoAlarmComponent::publish_partition_status_(const uint8_t *data) {
       continue;
     if (armed)
       text += ", ";
-    text += TYPES[type];
+    text += TYPES[type - KYO_ST_ARMED_TOTAL];
     text += ": [";
     const char *separator = "";
     for (uint8_t partition = 0; partition < KYO_MAX_PARTITIONS; partition++) {
@@ -562,6 +575,121 @@ void KyoAlarmComponent::publish_partition_status_(const uint8_t *data) {
   // Polled every update_interval: publish changes only
   if (!this->partition_status_text_sensor_->has_state() || this->partition_status_text_sensor_->state != text)
     this->partition_status_text_sensor_->publish_state(text);
+}
+#endif
+
+#ifdef USE_KYO_ALARM_EVENT_LOG
+void KyoAlarmComponent::handle_event_next_(uint8_t next) {
+  if (this->events_busy_)
+    return;
+  if (!this->event_next_.has_value()) {
+    // Events logged before the first status read are not sent, only the last one is shown
+    this->event_next_ = next;
+#ifdef USE_TEXT_SENSOR
+    if (this->last_event_text_sensor_ != nullptr)
+      this->read_events_(next - 1, 1, true);
+#endif
+    return;
+  }
+  // The next slot is not reset when the communication is lost: the events logged meanwhile are read once the panel
+  // answers again, as long as they have not been overwritten
+  uint8_t first = *this->event_next_;
+  uint8_t pending = next - first;
+  if (pending == 0)
+    return;
+  // One read per status poll, so that the status keeps being updated while many events are read. A read does not
+  // wrap around the end of the ring
+  this->read_events_(first, std::min<uint16_t>({pending, EVENTS_PER_READ, uint16_t(KYO_EVENT_LOG_SLOTS - first)}),
+                     false);
+}
+
+void KyoAlarmComponent::read_events_(uint8_t first, uint8_t count, bool silent) {
+  this->events_busy_ = true;
+  this->push_back_(this->make_read_(KYO_REG_EVENT_LOG + first * KYO_EVENT_SIZE, count * KYO_EVENT_SIZE,
+                                    [this, first, count, silent](bool success, const uint8_t *data) {
+                                      if (!success) {
+                                        // Read again at the next status poll
+                                        this->events_busy_ = false;
+                                        return;
+                                      }
+                                      std::memcpy(this->events_.data(), data, count * KYO_EVENT_SIZE);
+                                      this->events_count_ = count;
+                                      this->events_index_ = 0;
+                                      this->events_silent_ = silent;
+                                      if (!silent)
+                                        this->event_next_ = uint8_t(first + count);
+                                      this->process_events_();
+                                    }));
+}
+
+void KyoAlarmComponent::process_events_() {
+  while (this->events_index_ < this->events_count_) {
+    const uint8_t *record = this->events_.data() + this->events_index_++ * KYO_EVENT_SIZE;
+    if (kyo_event_empty(record))
+      continue;
+    uint16_t code = record[KYO_EV_CODE] << 8 | record[KYO_EV_CODE + 1];
+    KyoEventCode decoded = kyo_decode_event(code);
+    this->event_ = KyoEvent{};
+    this->event_.code = code;
+    this->event_.description = KYO_EVENT_TEXTS[size_t(decoded.type)];
+    this->event_.number = decoded.number;
+    snprintf(this->event_.time, sizeof(this->event_.time), "%04u-%02u-%02u %02u:%02u",
+             2000 + (record[KYO_EV_YEAR] % 100), record[KYO_EV_MONTH] % 100, record[KYO_EV_DAY] % 100,
+             record[KYO_EV_HOUR] % 100, record[KYO_EV_MINUTE] % 100);
+
+    uint16_t name_address = kyo_event_name_address(decoded);
+    if (name_address == 0) {
+      this->publish_event_();
+      continue;
+    }
+    // Read the name, publish the event and go on with the next records
+    this->push_front_(this->make_read_(name_address, KYO_NAME_SIZE, [this](bool success, const uint8_t *data) {
+      if (success) {
+        // Names are padded with spaces. Characters outside printable ASCII are replaced, the text must be UTF-8
+        int last = -1;
+        for (int i = 0; i < KYO_NAME_SIZE; i++) {
+          char c = char(data[i]);
+          this->event_.name[i] = c >= 0x20 && c < 0x7f ? c : '?';
+          if (c != ' ')
+            last = i;
+        }
+        this->event_.name[last + 1] = '\0';
+      }
+      this->publish_event_();
+      this->process_events_();
+    }));
+    return;
+  }
+  this->events_busy_ = false;
+}
+
+void KyoAlarmComponent::publish_event_() {
+  // e.g. "2026-11-01 11:59 Bypass Zone: Kitchen window", "... Bypass Zone 9" if the zone has no name
+  std::string text = this->event_.time;
+  text += ' ';
+  text += this->event_.description;
+  if (this->event_.name[0] != '\0') {
+    text += ": ";
+    text += this->event_.name;
+  } else if (this->event_.number != 0) {
+    text += ' ';
+    text += to_string(this->event_.number);
+  } else if (this->event_.description == KYO_EVENT_TEXTS[size_t(KyoEventType::UNKNOWN)]) {
+    text += ' ';
+    text += to_string(this->event_.code);
+  }
+
+  if (this->events_silent_) {
+    ESP_LOGD(TAG, "Last event: %s", text.c_str());
+  } else {
+    ESP_LOGI(TAG, "Event: %s", text.c_str());
+  }
+#ifdef USE_TEXT_SENSOR
+  if (this->last_event_text_sensor_ != nullptr)
+    this->last_event_text_sensor_->publish_state(text);
+#endif
+  if (!this->events_silent_)
+    this->event_callback_.call(this->event_);
 }
 #endif
 

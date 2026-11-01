@@ -80,6 +80,22 @@ struct KyoPartitionControl {
   uint8_t arm() const { return this->arm_total | this->arm_partial | this->arm_partial_no_delay; }
 };
 
+#ifdef USE_KYO_ALARM_EVENT_LOG
+/// An event of the panel event log, passed to the on_event automations.
+struct KyoEvent {
+  /// Event code, see the BIS-KYO documentation
+  uint16_t code{0};
+  /// Description in the configured language, e.g. "Bypass Zone"
+  const char *description{""};
+  /// Partition, zone, code, key or call, 1-based; 0 if the event has none
+  uint8_t number{0};
+  /// Name of the partition, zone, code or key stored in the panel, empty if it has none or it could not be read
+  char name[KYO_NAME_SIZE + 1]{};
+  /// Panel time of the event, "YYYY-MM-DD hh:mm"
+  char time[17]{};
+};
+#endif
+
 /// Implemented by entities that register with KyoAlarmComponent to receive status updates.
 class KyoAlarmListener {
  public:
@@ -109,6 +125,15 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
   }
   void set_partition_status_text_sensor(text_sensor::TextSensor *sensor) {
     this->partition_status_text_sensor_ = sensor;
+  }
+#ifdef USE_KYO_ALARM_EVENT_LOG
+  void set_last_event_text_sensor(text_sensor::TextSensor *sensor) { this->last_event_text_sensor_ = sensor; }
+#endif
+#endif
+#ifdef USE_KYO_ALARM_EVENT_LOG
+  /// Called for each new event of the panel event log, not for those logged before the first status read.
+  template<typename F> void add_on_event_callback(F &&callback) {
+    this->event_callback_.add(std::forward<F>(callback));
   }
 #endif
 #ifdef USE_TIME
@@ -184,6 +209,12 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
 #ifdef USE_TEXT_SENSOR
   void publish_partition_status_(const uint8_t *data);
 #endif
+#ifdef USE_KYO_ALARM_EVENT_LOG
+  void handle_event_next_(uint8_t next);
+  void read_events_(uint8_t first, uint8_t count, bool silent);
+  void process_events_();
+  void publish_event_();
+#endif
   void set_online_(bool online);
 #ifdef USE_TIME
   void on_time_sync_();
@@ -198,6 +229,9 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
   text_sensor::TextSensor *panel_model_text_sensor_{nullptr};
   text_sensor::TextSensor *firmware_version_text_sensor_{nullptr};
   text_sensor::TextSensor *partition_status_text_sensor_{nullptr};
+#ifdef USE_KYO_ALARM_EVENT_LOG
+  text_sensor::TextSensor *last_event_text_sensor_{nullptr};
+#endif
 #endif
 #ifdef USE_TIME
   time::RealTimeClock *time_{nullptr};
@@ -220,6 +254,21 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
 
   // PIN table, filled while verifying a code and wiped right after
   std::array<uint8_t, KYO_REG_PINS_1_SIZE + KYO_REG_PINS_2_SIZE> pins_{};
+
+#ifdef USE_KYO_ALARM_EVENT_LOG
+  static const uint8_t EVENTS_PER_READ = KYO_MAX_READ_SIZE / KYO_EVENT_SIZE;
+
+  LazyCallbackManager<void(const KyoEvent &)> event_callback_;
+  /// Next slot of the event log to read, unknown until the first status read
+  optional<uint8_t> event_next_{};
+  /// Records read and not processed yet, the event being processed
+  bool events_busy_{false};
+  bool events_silent_{false};
+  uint8_t events_count_{0};
+  uint8_t events_index_{0};
+  std::array<uint8_t, EVENTS_PER_READ * KYO_EVENT_SIZE> events_{};
+  KyoEvent event_{};
+#endif
 
   // Outcome of the last raw read
   bool raw_pending_{false};

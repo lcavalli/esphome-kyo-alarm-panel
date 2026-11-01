@@ -43,6 +43,7 @@ kyo_alarm:
   id: kyo
   model: KYO32G
   time_id: ha_time            # optional, keeps the panel clock in sync
+  language: en                # of the event descriptions, en or it
 
 alarm_control_panel:
   - platform: kyo_alarm
@@ -101,6 +102,8 @@ text_sensor:
       name: "Firmware version"
     partition_status:
       name: "Partition status"   # see Configuring the arming modes
+    last_event:
+      name: "Last event"         # see Event log
 ```
 
 Every entity accepts the full schema of its domain (`name`, `icon`, `internal`, filters, ...). With more than
@@ -114,6 +117,8 @@ one `kyo_alarm` hub, set `kyo_alarm_id` on each platform.
 | `update_interval` | Status polling interval, default `1s`. |
 | `time_id` | Time source used to set the panel clock. |
 | `clock_max_drift` | At every time sync the panel clock is read, and set only when it differs from the time source by more than this, default `30s`, from `5s` to `30min`. DST changes are corrected the same way; failed reads and writes are retried on the next time sync. |
+| `language` | Language of the event descriptions, `en` (default) or `it`, the same for all hubs. Only the texts of this language are compiled in. |
+| `on_event` | Automations run for each new event of the panel event log, see [Event log](#event-log). |
 
 ### Platforms
 
@@ -123,7 +128,7 @@ one `kyo_alarm` hub, set `kyo_alarm_id` on each platform.
 | `binary_sensor` | `communication` (off after 3 failed requests, see [Communication loss](#communication-loss)); warnings `mains_failure`, `bpi_missing`, `fuse_fault`, `low_battery`, `phone_line_fault`, `default_codes`, `wireless_fault`; tampers `tamper_zone`, `tamper_false_key`, `tamper_bpi`, `tamper_system`, `tamper_rf_jam`, `tamper_wireless`; `zones`, a list of `zone` with `sensor`, `tamper`, `alarm_memory`, `tamper_memory`. |
 | `switch` | `zones`, a list of `zone` with `bypass`. |
 | `button` | `reset_memory`, resets alarm and tamper memories; `sync_clock`, sets the panel clock from the time source now, regardless of `clock_max_drift` (requires `time_id` on the hub). |
-| `text_sensor` | `panel_model`, `firmware_version`; `partition_status`, the partitions armed with each arming type, see [Configuring the arming modes](#configuring-the-arming-modes). |
+| `text_sensor` | `panel_model`, `firmware_version`; `partition_status`, the partitions armed with each arming type, see [Configuring the arming modes](#configuring-the-arming-modes); `last_event`, the last event of the panel event log, see [Event log](#event-log). |
 
 ### Arming modes
 
@@ -235,6 +240,71 @@ longer trusted:
 Recovery is automatic: as soon as the panel answers, `communication` turns on and every entity is updated with
 the new status.
 
+### Event log
+
+The panel logs its last 256 events, the log shown by the keypad: what happened, the partition, zone, user code or key
+involved, and when. The hub reads the new events as the panel logs them, and makes each one available:
+
+- in the `last_event` text sensor, e.g. `2026-11-01 11:59 Bypass Zone: Kitchen window`;
+- to the `on_event` automations of the hub, as `event`:
+
+| Field | Content |
+| --- | --- |
+| `event.code` | Event code, from the BIS-KYO documentation of the panel, e.g. `64`. |
+| `event.description` | Description in the configured `language`, e.g. `Bypass Zone` (`Esclusione Zona` in Italian). |
+| `event.number` | Number of the partition, zone, user code, key or failed call, e.g. `9`; `0` if the event has none. |
+| `event.name` | Name stored in the panel for the partition, zone, user code or key, e.g. `Kitchen window`; empty if the event has none or the name could not be read. |
+| `event.time` | Time of the event, by the panel clock, `YYYY-MM-DD hh:mm`. |
+
+- At startup the text sensor shows the last event logged, without running the automations: the events logged while
+  the ESP was off are not sent. Those logged while the communication with the panel was lost are sent once it answers
+  again, as long as they are still in the log.
+- Each command from Home Assistant is logged too, preceded by a `Remote Command` event. Panel clock settings are not
+  logged.
+- Names are read from the panel with each event; characters other than printable ASCII are shown as `?`.
+- Home Assistant does not record a state equal to the previous one: two identical events in the same minute appear
+  once in the history of the text sensor, while `on_event` runs for both.
+
+To show the events in Home Assistant, add a *Logbook* card with the text sensor (use its entity id):
+
+```yaml
+type: logbook
+title: Alarm events
+target:
+  entity_id: sensor.kyo_alarm_last_event
+hours_to_show: 168
+```
+
+To use them in Home Assistant automations, send them as events with `homeassistant.event`. The device must be allowed
+to perform Home Assistant actions: enable it in *Settings → Devices & services → ESPHome*, *Configure* on the device.
+
+```yaml
+kyo_alarm:
+  on_event:
+    - homeassistant.event:
+        event: esphome.kyo_alarm_event
+        data:
+          code: !lambda return event.code;
+          description: !lambda return event.description;
+          number: !lambda return event.number;
+          name: !lambda return event.name;
+          time: !lambda return event.time;
+```
+
+Then, e.g., a notification for each event:
+
+```yaml
+automation:
+  - alias: Alarm event notification
+    triggers:
+      - trigger: event
+        event_type: esphome.kyo_alarm_event
+    actions:
+      - action: notify.notify
+        data:
+          message: "{{ trigger.event.data.description }} {{ trigger.event.data.name }}"
+```
+
 ### Raw reads (diagnostics)
 
 The `kyo_alarm.read_raw` action sends a read request written in hex and waits for the reply, to explore the panel
@@ -297,7 +367,7 @@ Bentel KYO panels. The main differences:
 | Zone bypass | A switch for each zone. | Include and exclude buttons, and a bypass binary sensor. |
 | Outputs | No. | State, activation and pulse. |
 | Siren state | No. | Yes. |
-| Event log | No. | Read from a button and written to the ESPHome logs. |
+| Event log | New events sent to Home Assistant as they are logged, the last one in a text sensor. | Read from a button and written to the ESPHome logs. |
 | Programming data | No. | Zone and output names, zone types and partitions, entry and exit delays and siren timer of each partition. |
 | Polling | Always on. | A switch stops it, to free the serial port. |
 
