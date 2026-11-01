@@ -11,6 +11,8 @@ MULTI_CONF = True
 
 CONF_CLOCK_MAX_DRIFT = "clock_max_drift"
 CONF_KYO_ALARM_ID = "kyo_alarm_id"
+CONF_LANGUAGE = "language"
+CONF_ON_EVENT = "on_event"
 CONF_REQUEST = "request"
 CONF_ZONE = "zone"
 CONF_ZONES = "zones"
@@ -22,12 +24,22 @@ KyoAlarmComponent = kyo_alarm_ns.class_(
 KyoAlarmListener = kyo_alarm_ns.class_("KyoAlarmListener")
 StatusField = kyo_alarm_ns.enum("StatusField", is_class=True)
 ReadRawAction = kyo_alarm_ns.class_("ReadRawAction", automation.Action)
+KyoEvent = kyo_alarm_ns.struct("KyoEvent")
+KyoEventConstRef = KyoEvent.operator("ref").operator("const")
 
 # Supported models and their number of zones
 MODELS = {
     "KYO32G": 32,
 }
 MAX_ZONES = max(MODELS.values())
+
+# Languages of the event descriptions
+LANGUAGES = ["en", "it"]
+
+
+def enable_event_log():
+    """Compile in the event log, used by the last_event text sensor and the on_event automations."""
+    cg.add_define("USE_KYO_ALARM_EVENT_LOG")
 
 
 def validate_unique_zones(zones):
@@ -85,6 +97,9 @@ CONFIG_SCHEMA = cv.All(
                 cv.positive_time_period_seconds,
                 cv.Range(min=cv.TimePeriod(seconds=5), max=cv.TimePeriod(minutes=30)),
             ),
+            # Only the texts of one language are compiled in, so it is the same for all hubs
+            cv.Optional(CONF_LANGUAGE, default="en"): cv.one_of(*LANGUAGES, lower=True),
+            cv.Optional(CONF_ON_EVENT): automation.validate_automation({}),
         }
     )
     .extend(cv.polling_component_schema("1s"))
@@ -116,6 +131,15 @@ async def to_code(config):
     if time_id := config.get(CONF_TIME_ID):
         cg.add(var.set_time(await cg.get_variable(time_id)))
         cg.add(var.set_clock_max_drift(config[CONF_CLOCK_MAX_DRIFT]))
+
+    if config[CONF_LANGUAGE] == "it":
+        cg.add_define("USE_KYO_ALARM_EVENT_LANGUAGE_IT")
+    if on_event := config.get(CONF_ON_EVENT):
+        enable_event_log()
+        for conf in on_event:
+            await automation.build_callback_automation(
+                var, "add_on_event_callback", [(KyoEventConstRef, "event")], conf
+            )
 
 
 @automation.register_action(

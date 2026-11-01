@@ -55,6 +55,18 @@ kyo_alarm:
   model: KYO32G
   # Keep the panel clock in sync
   time_id: ha_time
+  # Language of the event descriptions: en or it
+  language: en
+  # Send each new event of the panel event log to Home Assistant, see the README
+  on_event:
+    - homeassistant.event:
+        event: esphome.kyo_alarm_event
+        data:
+          code: !lambda return event.code;
+          description: !lambda return event.description;
+          number: !lambda return event.number;
+          name: !lambda return event.name;
+          time: !lambda return event.time;
 
 alarm_control_panel:
   - platform: kyo_alarm
@@ -127,3 +139,6 @@ text_sensor:
     # Partitions armed with each arming type, to configure the arming modes, see the README
     partition_status:
       name: "Partition status"
+    # Last event of the panel event log, see the README
+    last_event:
+      name: "Last event"

@@ -80,6 +80,80 @@ void kyo_encode_zones(uint32_t zones, uint8_t *out) {
   out[3] = zones;
 }
 
+bool kyo_event_empty(const uint8_t *record) {
+  // Event code 0 is a valid event (alarm in partition 1): empty slots are recognized by their date
+  return record[KYO_EV_DAY] == 0 || record[KYO_EV_MONTH] == 0 || record[KYO_EV_MONTH] > 12;
+}
+
+namespace {
+/// Event codes of each type: code = first + number - 1
+struct EventRange {
+  uint16_t first;
+  uint8_t count;
+  KyoEventType type;
+  KyoEventSubject subject;
+};
+
+// KYO32 table of the BIS-KYO documentation. Remote command (444) is not documented, it is logged by the panel before
+// each command received over the serial line
+const EventRange EVENT_RANGES[] = {
+    {0, 8, KyoEventType::ALARM_PARTITION, KyoEventSubject::PARTITION},
+    {8, 32, KyoEventType::ALARM_ZONE, KyoEventSubject::ZONE},
+    {40, 8, KyoEventType::INACTIVITY_PARTITION, KyoEventSubject::PARTITION},
+    {48, 8, KyoEventType::NEGLIGENCE_PARTITION, KyoEventSubject::PARTITION},
+    {56, 32, KyoEventType::BYPASS_ZONE, KyoEventSubject::ZONE},
+    {88, 32, KyoEventType::UNBYPASS_ZONE, KyoEventSubject::ZONE},
+    {120, 24, KyoEventType::VALID_CODE, KyoEventSubject::CODE},
+    {144, 128, KyoEventType::VALID_KEY, KyoEventSubject::KEY},
+    {272, 32, KyoEventType::AUTO_BYPASS_ZONE, KyoEventSubject::ZONE},
+    {304, 8, KyoEventType::ARM_PARTITION, KyoEventSubject::PARTITION},
+    {312, 8, KyoEventType::DISARM_PARTITION, KyoEventSubject::PARTITION},
+    {320, 8, KyoEventType::REQUEST_ARM_PARTITION, KyoEventSubject::PARTITION},
+    {328, 8, KyoEventType::REQUEST_DISARM_PARTITION, KyoEventSubject::PARTITION},
+    {336, 8, KyoEventType::RESET_MEMORY_PARTITION, KyoEventSubject::PARTITION},
+    {344, 8, KyoEventType::DISARM_DURESS_PARTITION, KyoEventSubject::PARTITION},
+    {352, 8, KyoEventType::FAILED_CALL, KyoEventSubject::NUMBER},
+    {360, 32, KyoEventType::TAMPER_ZONE, KyoEventSubject::ZONE},
+    {392, 32, KyoEventType::RESTORE_ZONE, KyoEventSubject::ZONE},
+    {444, 1, KyoEventType::REMOTE_COMMAND, KyoEventSubject::NONE},
+};
+}  // namespace
+
+KyoEventCode kyo_decode_event(uint16_t code) {
+  KyoEventCode event;
+  for (const auto &range : EVENT_RANGES) {
+    if (code >= range.first && code < range.first + range.count) {
+      event.type = range.type;
+      event.subject = range.subject;
+      if (range.subject != KyoEventSubject::NONE)
+        event.number = code - range.first + 1;
+      break;
+    }
+  }
+  return event;
+}
+
+uint16_t kyo_event_name_address(const KyoEventCode &event) {
+  uint16_t table;
+  switch (event.subject) {
+    case KyoEventSubject::PARTITION:
+      table = KYO_REG_PARTITION_NAMES;
+      break;
+    case KyoEventSubject::ZONE:
+      table = KYO_REG_ZONE_NAMES;
+      break;
+    case KyoEventSubject::CODE:
+      table = KYO_REG_CODE_NAMES;
+      break;
+    case KyoEventSubject::KEY:
+      table = KYO_REG_KEY_NAMES;
+      break;
+    default:
+      return 0;
+  }
+  return table + (event.number - 1) * KYO_NAME_SIZE;
+}
+
 bool kyo_encode_pin(const char *pin, uint32_t *out) {
   uint32_t value = 0;
   size_t len = 0;
