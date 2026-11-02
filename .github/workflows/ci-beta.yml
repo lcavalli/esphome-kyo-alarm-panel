@@ -1,0 +1,75 @@
+name: CI with the next ESPHome
+
+# Compiles the example with the beta and dev releases of ESPHome, to find incompatibilities before they reach a stable
+# release. Not a required check: a failure only marks the run as failed
+on:
+  schedule:
+    - cron: "23 4 * * *"
+  # Changes to this workflow are tested in their pull request
+  pull_request:
+    branches: [main]
+    paths: [.github/workflows/ci-beta.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EXAMPLE: kyo-alarm-example.yaml
+
+jobs:
+  example:
+    name: Validate and compile the example with ESPHome ${{ matrix.channel }}
+    runs-on: ubuntu-latest
+    strategy:
+      # A broken dev release must not stop the beta build
+      fail-fast: false
+      matrix:
+        channel: [beta, dev]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install ESPHome
+        id: esphome
+        env:
+          CHANNEL: ${{ matrix.channel }}
+        run: |
+          if [[ "${CHANNEL}" == dev ]]; then
+            # The head of the dev branch
+            pip install https://github.com/esphome/esphome/archive/refs/heads/dev.tar.gz
+          else
+            # The latest release, beta or stable. Only ESPHome may be a pre-release: pinning its version allows it,
+            # while --pre would allow pre-releases of the dependencies too
+            pip install --pre --no-deps esphome
+            pip install "esphome==$(pip show esphome | sed -n 's/^Version: //p')"
+          fi
+          echo "version=$(python -c 'import esphome.const; print(esphome.const.__version__)')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v6
+        with:
+          path: ~/.platformio
+          key: platformio-${{ runner.os }}-esphome-${{ steps.esphome.outputs.version }}
+
+      # The real secrets.yaml is not in the repository
+      - name: Create dummy secrets
+        run: |
+          cat > secrets.yaml <<EOF
+          wifi_ssid: ci
+          wifi_password: ci-password
+          api_encryption_key: "$(openssl rand -base64 32)"
+          EOF
+
+      - name: Validate the configuration
+        run: esphome config "${EXAMPLE}"
+
+      - name: Compile the firmware
+        run: esphome compile "${EXAMPLE}"
