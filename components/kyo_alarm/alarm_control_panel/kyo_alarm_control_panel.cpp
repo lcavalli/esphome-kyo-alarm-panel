@@ -100,11 +100,6 @@ void KyoAlarmControlPanel::control(const AlarmControlPanelCall &call) {
 }
 
 void KyoAlarmControlPanel::execute_(AlarmControlPanelState target, KyoPartitionControl control) {
-  // A mode sets the whole panel: partitions armed now and not part of the mode are disarmed in the same write.
-  // Partitions of the mode armed with another type are switched to their type without disarming them first.
-  if (target != ACP_STATE_DISARMED)
-    control.disarm = this->parent_->get_status().armed() & ~control.arm();
-
   AlarmControlPanelState previous = this->get_state();
   this->in_transition_ = true;
   this->target_state_ = target;

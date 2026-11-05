@@ -159,11 +159,9 @@ partitions:
 - A partition can only have one arming type in a mode. Modes arming the same partitions with the same types cannot
   be told apart: the configuration shows a warning, and the panel is reported in the first of them (in the order
   `away`, `home`, `night`, `vacation`).
-- A mode sets the whole panel: arming it arms its partitions with their arming type and, in the same command,
-  disarms the armed partitions that are not part of it. With `away: [1, 2]` and `home: {partial: [1]}`, switching
-  from away to home arms partition 1 partial and disarms partition 2.
-- Partitions already armed with another type are switched to their type in the mode without being disarmed first.
-  This has not been verified on a panel yet.
+- Home Assistant can only arm the panel while it is disarmed: ESPHome refuses to arm an alarm control panel that is
+  not `disarmed` (`Cannot arm when not disarmed` in the device logs). To switch from one mode to another, e.g. from
+  home to night, disarm first. A keypad can still add partitions to an armed panel, and the new state is reported.
 - Partitions configured in a mode but not present in the panel are ignored; a mode with none of them is refused.
 
 ### Configuring the arming modes
