@@ -699,13 +699,17 @@ void KyoAlarmComponent::publish_event_() {
 #endif
 
 void KyoAlarmComponent::set_online_(bool online) {
+  // Before the online check, so that the warning is also set when the panel has not answered since boot. Setting the
+  // warning logs it, clearing it does not
+  if (online) {
+    this->status_clear_warning();
+  } else {
+    this->status_set_warning(LOG_STR("Panel not responding"));
+  }
   if (this->status_.online == online)
     return;
-  if (online) {
+  if (online)
     ESP_LOGI(TAG, "Panel online");
-  } else {
-    ESP_LOGW(TAG, "Panel not responding");
-  }
   this->status_.online = online;
   if (!online) {
     // The last status read is stale: it is reported as unknown until the next poll. The panel may also have been
