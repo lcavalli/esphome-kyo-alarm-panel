@@ -1,0 +1,46 @@
+name: Find the changed files
+description: >-
+  Whether the files a check covers changed, so that its job runs only then. A job skipped with `if:` counts as passed
+  for the required checks of the branch ruleset, unlike a workflow filtered out with `paths`, whose checks never
+  report. Needs the repository checked out with its history (fetch-depth: 0).
+
+inputs:
+  files:
+    description: Extended regular expression matching the paths the check covers, e.g. '\.py$|^pyproject\.toml$'
+    required: true
+
+outputs:
+  changed:
+    description: "'true' if a file the check covers changed, or if everything must run"
+    value: ${{ steps.match.outputs.changed }}
+
+runs:
+  using: composite
+  steps:
+    - name: Match the changed files
+      id: match
+      shell: bash
+      env:
+        FILES: ${{ inputs.files }}
+        EVENT: ${{ github.event_name }}
+        BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        WORKFLOW_REF: ${{ github.workflow_ref }}
+        REPOSITORY: ${{ github.repository }}
+      run: |
+        # Also run when the workflow itself, the pinned tools or this action changed
+        workflow=${WORKFLOW_REF#"${REPOSITORY}/"}
+        workflow=${workflow%%@*}
+        always="^(${workflow//./\\.}|\.github/requirements-ci\.txt|\.github/actions/changed-files/.*)$"
+        # Everything runs when started by hand, or when the base is unknown (all zeros on a new branch)
+        if [[ "${EVENT}" == workflow_dispatch || ! "${BASE}" =~ [1-9a-f] ]]; then
+          changed=true
+        else
+          files=$(git diff --name-only "${BASE}" HEAD)
+          echo "Changed files:" && echo "${files}"
+          if grep -qE "${FILES}|${always}" <<< "${files}"; then
+            changed=true
+          else
+            changed=false
+          fi
+        fi
+        echo "changed=${changed}" | tee -a "${GITHUB_OUTPUT}"

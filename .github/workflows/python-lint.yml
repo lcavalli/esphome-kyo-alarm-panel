@@ -1,0 +1,58 @@
+name: Python lint
+
+# Checks the formatting of the Python code and lints it with Ruff, configured in pyproject.toml.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned versions of the tools, updated by Dependabot
+  REQUIREMENTS: .github/requirements-ci.txt
+
+jobs:
+  # The check runs only if the files it covers changed, see .github/actions/changed-files
+  changes:
+    name: Find the changed files
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.changes.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: changes
+        uses: ./.github/actions/changed-files
+        with:
+          files: '\.py$|^pyproject\.toml$'
+
+  ruff:
+    name: Check the Python code
+    needs: changes
+    if: needs.changes.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install Ruff
+        run: pip install -c "${REQUIREMENTS}" ruff
+
+      - name: Check the formatting
+        run: ruff format --check --diff .
+
+      - name: Lint
+        run: ruff check --output-format=github .
