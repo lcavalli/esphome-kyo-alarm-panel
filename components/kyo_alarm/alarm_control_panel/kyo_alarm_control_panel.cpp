@@ -2,6 +2,7 @@
 
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
+#include "esphome/core/version.h"
 
 namespace esphome::kyo_alarm {
 
@@ -155,11 +156,17 @@ AlarmControlPanelState KyoAlarmControlPanel::compute_state_(const KyoAlarmStatus
 }
 
 void KyoAlarmControlPanel::dump_config() {
+#if ESPHOME_VERSION_CODE >= VERSION_CODE(2026, 11, 0)
+  // get_name() is deprecated since 2026.11.0: on ESP8266 it keeps a RAM copy of the name stored in flash
+  const char *name = LOG_STR_ARG(this->get_log_name());
+#else
+  const char *name = this->get_name().c_str();
+#endif
   ESP_LOGCONFIG(TAG,
                 "  Alarm control panel '%s'\n"
                 "    Requires code: %s\n"
                 "    Requires code to arm: %s",
-                this->get_name().c_str(), YESNO(this->get_requires_code()), YESNO(this->get_requires_code_to_arm()));
+                name, YESNO(this->get_requires_code()), YESNO(this->get_requires_code_to_arm()));
   dump_mode("Away", this->away_);
   dump_mode("Home", this->home_);
   dump_mode("Night", this->night_);
