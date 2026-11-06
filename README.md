@@ -229,14 +229,17 @@ Zones can only be bypassed while the panel is disarmed.
 After 3 failed requests in a row the `communication` binary sensor turns off and the last panel status is no
 longer trusted:
 
+- the hub sets the ESPHome warning status, also when the panel has not answered since boot: a
+  [`status_led`](https://esphome.io/components/status_led/) blinks slowly and the log shows
+  `kyo_alarm set Warning flag: Panel not responding`;
 - the other binary sensors (zones, memories, warnings, tampers) become unknown;
 - the alarm control panel and the bypass switches keep their last state (ESPHome cannot report them as
   unknown), but commands are refused until the status is read again;
 - the hub keeps polling, starting again from the panel model and partitions, in case the panel was restarted or
   reprogrammed in the meantime.
 
-Recovery is automatic: as soon as the panel answers, `communication` turns on and every entity is updated with
-the new status.
+Recovery is automatic: as soon as the panel answers, the warning status is cleared, `communication` turns on and
+every entity is updated with the new status.
 
 ### Event log
 
