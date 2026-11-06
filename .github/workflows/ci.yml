@@ -29,6 +29,7 @@ jobs:
       cpp: ${{ steps.filter.outputs.cpp }}
       python: ${{ steps.filter.outputs.python }}
       example: ${{ steps.filter.outputs.example }}
+      tests: ${{ steps.filter.outputs.tests }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -56,6 +57,7 @@ jobs:
             echo "cpp=$(match '\.(cpp|h)$|^\.clang-format$')"
             echo "python=$(match '\.py$|^pyproject\.toml$')"
             echo "example=$(match '^components/|^kyo-alarm-example\.yaml$')"
+            echo "tests=$(match '^components/|^tests/')"
           } | tee -a "${GITHUB_OUTPUT}"
 
   format:
@@ -138,3 +140,64 @@ jobs:
 
       - name: Compile the firmware
         run: esphome compile "${EXAMPLE}"
+
+  # Every combination of the optional parts of the component on ESP8266, the full configuration on the other platforms.
+  # The toolchains are downloaded at each run: ESPHome keeps them in ~/.cache/esphome, several GB for ESP32
+  tests:
+    name: Compile the tests on ${{ matrix.platform }}
+    needs: changes
+    if: needs.changes.outputs.tests == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: esp8266
+            configs: minimal event-log text-sensors full
+          - platform: esp32-idf
+            configs: full
+          - platform: esp32-arduino
+            configs: full
+          - platform: esp32-c3-idf
+            configs: full
+          - platform: rp2040
+            configs: full
+          - platform: bk72xx
+            configs: full
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: .github/requirements-ci.txt
+
+      - name: Install ESPHome
+        run: pip install -c "${REQUIREMENTS}" esphome
+
+      - name: Compile the tests
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          CONFIGS: ${{ matrix.configs }}
+        run: |
+          for config in ${CONFIGS}; do
+            echo "::group::${config}"
+            esphome -s platform "${PLATFORM}" compile "tests/${config}.yaml"
+            echo "::endgroup::"
+          done
+
+  # A single check for the branch ruleset, whatever the platforms in the matrix
+  tests-result:
+    name: Compile the tests
+    needs: [changes, tests]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the results
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          TESTS: ${{ needs.tests.result }}
+        run: |
+          echo "Find the changed files: ${CHANGES}, compile the tests: ${TESTS}"
+          [[ "${CHANGES}" == success && "${TESTS}" =~ ^(success|skipped)$ ]]

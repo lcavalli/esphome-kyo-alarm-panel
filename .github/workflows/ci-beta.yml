@@ -1,14 +1,14 @@
 name: CI with the next ESPHome
 
-# Compiles the example with the beta and dev releases of ESPHome, to find incompatibilities before they reach a stable
-# release. Not a required check: a failure only marks the run as failed
+# Compiles the example and part of the tests with the beta and dev releases of ESPHome, to find incompatibilities
+# before they reach a stable release. Not a required check: a failure only marks the run as failed
 on:
   schedule:
     - cron: "23 4 * * *"
-  # Changes to this workflow are tested in their pull request
+  # Changes to this workflow and to the tests are tested in their pull request
   pull_request:
     branches: [main]
-    paths: [.github/workflows/ci-beta.yml]
+    paths: [.github/workflows/ci-beta.yml, tests/**]
   workflow_dispatch:
 
 permissions:
@@ -73,3 +73,12 @@ jobs:
 
       - name: Compile the firmware
         run: esphome compile "${EXAMPLE}"
+
+      # The combinations of the optional parts the example does not cover, and ESP32 with ESP-IDF (see ci.yml)
+      - name: Compile the tests
+        run: |
+          for test in esp8266:minimal esp8266:event-log esp8266:text-sensors esp32-idf:full; do
+            echo "::group::${test}"
+            esphome -s platform "${test%%:*}" compile "tests/${test#*:}.yaml"
+            echo "::endgroup::"
+          done

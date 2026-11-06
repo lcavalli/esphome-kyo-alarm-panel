@@ -25,7 +25,8 @@ following the design and directions of the author.
 
 ## Configuration
 
-Requires ESPHome 2026.10.0 or later.
+Requires ESPHome 2026.10.0 or later. The component is used on an ESP8266; the CI also compiles it for ESP32
+(ESP-IDF and Arduino), ESP32-C3, RP2040 and BK72xx, which have not been tried on a panel.
 
 ```yaml
 uart:
@@ -353,6 +354,15 @@ Then, with `.venv/bin` in the `PATH` (`source .venv/bin/activate`):
 esphome compile kyo-alarm-example.yaml   # needs a secrets.yaml next to it, not in the repository
 git ls-files '*.cpp' '*.h' | xargs clang-format --dry-run --Werror
 ruff format --check . && ruff check .
+```
+
+The CI also compiles the configurations in `tests/`, each covering a combination of the optional parts of the
+component (`minimal`, `event-log`, `text-sensors`, `full`), on the platforms in `tests/platforms/` (ESP8266 by
+default):
+
+```sh
+esphome compile tests/minimal.yaml
+esphome -s platform esp32-idf compile tests/full.yaml
 ```
 
 ## Comparison with ESPKyoGate

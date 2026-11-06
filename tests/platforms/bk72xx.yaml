@@ -1,0 +1,18 @@
+# Beken BK7231N (LibreTiny)
+bk72xx:
+  board: generic-bk7231n-qfn32-tuya
+
+logger:
+  baud_rate: 0
+
+uart:
+  - id: uart_1
+    tx_pin: P11
+    rx_pin: P10
+    baud_rate: 9600
+    parity: EVEN
+  - id: uart_2
+    tx_pin: P0
+    rx_pin: P1
+    baud_rate: 9600
+    parity: EVEN

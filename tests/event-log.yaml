@@ -1,0 +1,54 @@
+# Event log and clock sync without text sensors: on_event only, time linked to the hub
+substitutions:
+  platform: esp8266
+
+esphome:
+  name: kyo-event-log-${platform}
+
+packages:
+  platform: !include platforms/${platform}.yaml
+
+external_components:
+  - source: ../components
+
+wifi:
+  ssid: test
+  password: test-password
+
+api:
+
+time:
+  - platform: homeassistant
+    id: ha_time
+
+kyo_alarm:
+  id: kyo
+  uart_id: uart_1
+  time_id: ha_time
+  on_event:
+    - logger.log:
+        format: "Event %u %s %u %s %s"
+        args: [event.code, event.description, event.number, event.name, event.time]
+
+alarm_control_panel:
+  - platform: kyo_alarm
+    name: Alarm
+
+binary_sensor:
+  - platform: kyo_alarm
+    communication:
+      name: Communication
+
+switch:
+  - platform: kyo_alarm
+    zones:
+      - zone: 1
+        bypass:
+          name: Zone 1 bypass
+
+button:
+  - platform: kyo_alarm
+    reset_memory:
+      name: Reset alarm memory
+    sync_clock:
+      name: Sync panel clock

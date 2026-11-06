@@ -1,0 +1,33 @@
+# Text sensors without the event log, and a time source not linked to the hub
+substitutions:
+  platform: esp8266
+
+esphome:
+  name: kyo-text-sensors-${platform}
+
+packages:
+  platform: !include platforms/${platform}.yaml
+
+external_components:
+  - source: ../components
+
+wifi:
+  ssid: test
+  password: test-password
+
+api:
+
+time:
+  - platform: homeassistant
+
+kyo_alarm:
+  uart_id: uart_1
+
+text_sensor:
+  - platform: kyo_alarm
+    panel_model:
+      name: Panel model
+    firmware_version:
+      name: Firmware version
+    partition_status:
+      name: Partition status

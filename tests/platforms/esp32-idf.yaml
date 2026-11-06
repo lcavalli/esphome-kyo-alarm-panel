@@ -1,0 +1,20 @@
+# ESP32 with ESP-IDF, the default framework
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+logger:
+  baud_rate: 0
+
+uart:
+  - id: uart_1
+    tx_pin: GPIO17
+    rx_pin: GPIO16
+    baud_rate: 9600
+    parity: EVEN
+  - id: uart_2
+    tx_pin: GPIO25
+    rx_pin: GPIO26
+    baud_rate: 9600
+    parity: EVEN
