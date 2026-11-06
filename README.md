@@ -370,9 +370,9 @@ esphome -s platform esp32-idf compile tests/full.yaml
 The CI requires every line of the component to be run by the unit tests:
 
 - `tests/cpp/`: the C++ code, with [GoogleTest](https://google.github.io/googletest/). ESPHome builds the tests for
-  the host, with AddressSanitizer and UndefinedBehaviorSanitizer (on Fedora, install `libasan`). A simulated panel
-  answers on the UART from its memory, and the tests set the time returned by `millis()`. The coverage is
-  reported with [gcovr](https://gcovr.com/), extra arguments are passed to it:
+  the host, with AddressSanitizer and UndefinedBehaviorSanitizer. A simulated panel answers on the UART from its
+  memory, and the tests set the time returned by `millis()`. The coverage is reported with
+  [gcovr](https://gcovr.com/), extra arguments are passed to it:
 
   ```sh
   tests/cpp/run.sh --fail-under-line 100
