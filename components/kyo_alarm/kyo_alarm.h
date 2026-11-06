@@ -241,6 +241,8 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
   Phase phase_{Phase::READ_PANEL_INFO};
   KyoAlarmStatus status_{};
   uint8_t failures_{0};
+  /// Whether set_online_() has reported the panel online or offline yet
+  bool online_reported_{false};
 
   // Request queue (ring buffer) and the request in progress
   std::array<Request, QUEUE_SIZE> queue_{};
