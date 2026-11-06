@@ -1,0 +1,68 @@
+# C++ unit tests of the component, built for the host and run with GoogleTest: see main.cpp
+esphome:
+  name: kyo-cpp-tests
+  libraries:
+    - google/googletest@^1.15.2
+  build_flags:
+    - -O0
+    - -g
+    - --coverage
+    # The tests set the time returned by millis(), see kyo_alarm/fake_millis.cpp
+    - -Wl,--wrap=_ZN7esphome6millisEv
+    - -fsanitize=address
+    - -fsanitize=undefined
+  includes:
+    - main.cpp
+    - kyo_alarm
+
+host:
+
+logger:
+  level: VERY_VERBOSE
+
+external_components:
+  - source: ../../components
+
+uart:
+  - id: uart_bus
+    port: /dev/null
+    baud_rate: 9600
+    parity: EVEN
+
+time:
+  - platform: host
+    id: host_time
+
+kyo_alarm:
+  id: kyo
+  time_id: host_time
+  on_event:
+    - logger.log: event
+
+alarm_control_panel:
+  - platform: kyo_alarm
+    name: Alarm
+
+binary_sensor:
+  - platform: kyo_alarm
+    communication:
+      name: Communication
+
+switch:
+  - platform: kyo_alarm
+    zones:
+      - zone: 1
+        bypass:
+          name: Zone 1 bypass
+
+button:
+  - platform: kyo_alarm
+    reset_memory:
+      name: Reset memory
+    sync_clock:
+      name: Sync clock
+
+text_sensor:
+  - platform: kyo_alarm
+    last_event:
+      name: Last event

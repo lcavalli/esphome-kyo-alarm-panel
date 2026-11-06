@@ -1,7 +1,8 @@
 name: CI with the next ESPHome
 
-# Compiles the example and part of the tests with the beta and dev releases of ESPHome, to find incompatibilities
-# before they reach a stable release. Not a required check: a failure only marks the run as failed
+# Compiles the example and part of the tests, and runs the unit tests, with the beta and dev releases of ESPHome, to
+# find incompatibilities before they reach a stable release. Not a required check: a failure only marks the run as
+# failed
 on:
   schedule:
     - cron: "23 4 * * *"
@@ -68,6 +69,17 @@ jobs:
 
       - name: Compile the firmware
         run: esphome compile "${EXAMPLE}"
+
+      # Not checked: the coverage of the tests
+      - name: Run the C++ tests
+        run: |
+          pip install -c .github/requirements-ci.txt gcovr
+          tests/cpp/run.sh
+
+      - name: Run the Python tests
+        run: |
+          pip install -c .github/requirements-ci.txt pytest pytest-cov
+          pytest
 
       # The combinations of the optional parts the example does not cover, and ESP32 with ESP-IDF (see ci.yml)
       - name: Compile the tests
