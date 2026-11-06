@@ -1,0 +1,98 @@
+name: Test configurations
+
+# Compiles the configurations in tests/: every combination of the optional parts of the component on
+# ESP8266, the full configuration on the other platforms.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned versions of the tools, updated by Dependabot
+  REQUIREMENTS: .github/requirements-ci.txt
+
+jobs:
+  # The check runs only if the files it covers changed, see .github/actions/changed-files
+  changes:
+    name: Find the changed files
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.changes.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: changes
+        uses: ./.github/actions/changed-files
+        with:
+          files: '^components/|^tests/[^/]+\.yaml$|^tests/platforms/'
+
+  # The toolchains are downloaded at each run: ESPHome keeps them in ~/.cache/esphome, several GB for ESP32
+  compile:
+    name: Compile the tests on ${{ matrix.platform }}
+    needs: changes
+    if: needs.changes.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: esp8266
+            configs: minimal event-log text-sensors full
+          - platform: esp32-idf
+            configs: full
+          - platform: esp32-arduino
+            configs: full
+          - platform: esp32-c3-idf
+            configs: full
+          - platform: rp2040
+            configs: full
+          - platform: bk72xx
+            configs: full
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: .github/requirements-ci.txt
+
+      - name: Install ESPHome
+        run: pip install -c "${REQUIREMENTS}" esphome
+
+      - name: Compile the tests
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          CONFIGS: ${{ matrix.configs }}
+        run: |
+          for config in ${CONFIGS}; do
+            echo "::group::${config}"
+            esphome -s platform "${PLATFORM}" compile "tests/${config}.yaml"
+            echo "::endgroup::"
+          done
+
+  # A single check for the branch ruleset, whatever the platforms in the matrix
+  result:
+    name: Compile the tests
+    needs: [changes, compile]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the results
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          COMPILE: ${{ needs.compile.result }}
+        run: |
+          echo "Find the changed files: ${CHANGES}, compile the tests: ${COMPILE}"
+          [[ "${CHANGES}" == success && "${COMPILE}" =~ ^(success|skipped)$ ]]

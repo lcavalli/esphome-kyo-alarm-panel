@@ -38,7 +38,7 @@ jobs:
         with:
           python-version: "3.13"
 
-      # No cache for the toolchains, see ci.yml
+      # No cache for the toolchains, see example.yml
       - name: Install ESPHome
         env:
           CHANNEL: ${{ matrix.channel }}
@@ -70,7 +70,7 @@ jobs:
       - name: Compile the firmware
         run: esphome compile "${EXAMPLE}"
 
-      # The combinations of the optional parts the example does not cover, and ESP32 with ESP-IDF (see ci.yml)
+      # The combinations of the optional parts the example does not cover, and ESP32 with ESP-IDF (see test-configs.yml)
       - name: Compile the tests
         run: |
           for test in esp8266:minimal esp8266:event-log esp8266:text-sensors esp32-idf:full; do

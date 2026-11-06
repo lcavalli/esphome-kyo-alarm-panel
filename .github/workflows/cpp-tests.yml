@@ -1,0 +1,59 @@
+name: C++ unit tests
+
+# Runs the unit tests in tests/cpp: built for the host by ESPHome and run with GoogleTest, with
+# AddressSanitizer and UndefinedBehaviorSanitizer. Every line of the component must run (the branches the sanitizers
+# add cannot all be taken).
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned versions of the tools, updated by Dependabot
+  REQUIREMENTS: .github/requirements-ci.txt
+
+jobs:
+  # The check runs only if the files it covers changed, see .github/actions/changed-files
+  changes:
+    name: Find the changed files
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.changes.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: changes
+        uses: ./.github/actions/changed-files
+        with:
+          files: '^components/|^tests/cpp/'
+
+  test:
+    name: Run the C++ tests
+    needs: changes
+    if: needs.changes.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: .github/requirements-ci.txt
+
+      - name: Install ESPHome and gcovr
+        run: pip install -c "${REQUIREMENTS}" esphome gcovr
+
+      - name: Run the tests
+        run: tests/cpp/run.sh --fail-under-line 100
