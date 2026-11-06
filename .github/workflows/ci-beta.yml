@@ -37,8 +37,8 @@ jobs:
         with:
           python-version: "3.13"
 
+      # No cache for the toolchains, see ci.yml
       - name: Install ESPHome
-        id: esphome
         env:
           CHANNEL: ${{ matrix.channel }}
         run: |
@@ -51,13 +51,8 @@ jobs:
             pip install --pre --no-deps esphome
             pip install "esphome==$(pip show esphome | sed -n 's/^Version: //p')"
           fi
-          echo "version=$(python -c 'import esphome.const; print(esphome.const.__version__)')" >> "$GITHUB_OUTPUT"
-
-      - name: Cache PlatformIO
-        uses: actions/cache@v6
-        with:
-          path: ~/.platformio
-          key: platformio-${{ runner.os }}-esphome-${{ steps.esphome.outputs.version }}
+          # The version under test, in the log
+          esphome version
 
       # The real secrets.yaml is not in the repository
       - name: Create dummy secrets
