@@ -1,0 +1,15 @@
+# Only the hub: no text sensors, no time, no event log
+substitutions:
+  platform: esp8266
+
+esphome:
+  name: kyo-minimal-${platform}
+
+packages:
+  platform: !include platforms/${platform}.yaml
+
+external_components:
+  - source: ../components
+
+kyo_alarm:
+  uart_id: uart_1

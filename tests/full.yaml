@@ -1,0 +1,159 @@
+# Every option of the component, with two hubs. Compiled on each platform
+substitutions:
+  platform: esp8266
+
+esphome:
+  name: kyo-full-${platform}
+
+packages:
+  platform: !include platforms/${platform}.yaml
+
+external_components:
+  - source: ../components
+
+wifi:
+  ssid: test
+  password: test-password
+
+api:
+  actions:
+    - action: read_raw
+      variables:
+        request: string
+      then:
+        - kyo_alarm.read_raw:
+            id: kyo_1
+            request: !lambda return request;
+        - api.respond:
+            success: !lambda return id(kyo_1).get_raw_error().empty();
+            error_message: !lambda return id(kyo_1).get_raw_error();
+            data: !lambda root["reply"] = id(kyo_1).get_raw_reply();
+
+time:
+  - platform: homeassistant
+    id: ha_time
+
+kyo_alarm:
+  - id: kyo_1
+    uart_id: uart_1
+    model: KYO32G
+    time_id: ha_time
+    clock_max_drift: 1min
+    language: it
+    update_interval: 2s
+    on_event:
+      - homeassistant.event:
+          event: esphome.kyo_alarm_event
+          data:
+            code: !lambda return event.code;
+            description: !lambda return event.description;
+            number: !lambda return event.number;
+            name: !lambda return event.name;
+            time: !lambda return event.time;
+  - id: kyo_2
+    uart_id: uart_2
+    language: it
+
+alarm_control_panel:
+  - platform: kyo_alarm
+    kyo_alarm_id: kyo_1
+    name: Alarm
+    partitions:
+      away: [1, 2, 3, 4, 5, 6, 7, 8]
+      home: [1, 4]
+      night: 0x0d
+      vacation:
+        total: [1]
+        partial: [2, 3]
+        partial_no_delay: [4]
+    requires_code: true
+    requires_code_to_arm: false
+  - platform: kyo_alarm
+    kyo_alarm_id: kyo_2
+    name: Second alarm
+    requires_code: false
+
+binary_sensor:
+  - platform: kyo_alarm
+    kyo_alarm_id: kyo_1
+    communication:
+      name: Communication
+    mains_failure:
+      name: Mains failure
+    bpi_missing:
+      name: BPI missing
+    fuse_fault:
+      name: Fuse fault
+    low_battery:
+      name: Low battery
+    phone_line_fault:
+      name: Phone line
+    default_codes:
+      name: Default codes
+    wireless_fault:
+      name: Wireless fault
+    tamper_zone:
+      name: Zone tamper
+    tamper_false_key:
+      name: False key
+    tamper_bpi:
+      name: BPI tamper
+    tamper_system:
+      name: System tamper
+    tamper_rf_jam:
+      name: RF jam
+    tamper_wireless:
+      name: Wireless tamper
+    zones:
+      - zone: 1
+        sensor:
+          name: Zone 1
+          device_class: door
+        tamper:
+          name: Zone 1 tamper
+        alarm_memory:
+          name: Zone 1 alarm memory
+        tamper_memory:
+          name: Zone 1 tamper memory
+      - zone: 32
+        sensor:
+          name: Zone 32
+  - platform: kyo_alarm
+    kyo_alarm_id: kyo_2
+    communication:
+      name: Second communication
+
+switch:
+  - platform: kyo_alarm
+    kyo_alarm_id: kyo_1
+    zones:
+      - zone: 1
+        bypass:
+          name: Zone 1 bypass
+      - zone: 32
+        bypass:
+          name: Zone 32 bypass
+
+button:
+  - platform: kyo_alarm
+    kyo_alarm_id: kyo_1
+    reset_memory:
+      name: Reset alarm memory
+    sync_clock:
+      name: Sync panel clock
+
+text_sensor:
+  - platform: kyo_alarm
+    kyo_alarm_id: kyo_1
+    panel_model:
+      name: Panel model
+    firmware_version:
+      name: Firmware version
+    partition_status:
+      name: Partition status
+    last_event:
+      name: Last event
+  - platform: kyo_alarm
+    kyo_alarm_id: kyo_2
+    panel_model:
+      name: Second panel model
