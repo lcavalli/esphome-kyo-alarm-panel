@@ -63,3 +63,12 @@ known-first-party = [
 ]
 combine-as-imports = true
 split-on-trailing-comma = false
+
+# Tests of the validation and code generation of the component, see tests/python
+[tool.pytest.ini_options]
+testpaths = ["tests/python"]
+addopts = "--cov --cov-report=term-missing"
+
+[tool.coverage.run]
+source = ["components"]
+branch = true

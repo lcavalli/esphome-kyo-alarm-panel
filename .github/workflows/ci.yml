@@ -30,6 +30,7 @@ jobs:
       python: ${{ steps.filter.outputs.python }}
       example: ${{ steps.filter.outputs.example }}
       tests: ${{ steps.filter.outputs.tests }}
+      cpp-tests: ${{ steps.filter.outputs.cpp-tests }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -57,7 +58,8 @@ jobs:
             echo "cpp=$(match '\.(cpp|h)$|^\.clang-format$')"
             echo "python=$(match '\.py$|^pyproject\.toml$')"
             echo "example=$(match '^components/|^kyo-alarm-example\.yaml$')"
-            echo "tests=$(match '^components/|^tests/')"
+            echo "tests=$(match '^components/|^tests/[^/]+\.yaml$|^tests/platforms/')"
+            echo "cpp-tests=$(match '^components/|^tests/cpp/')"
           } | tee -a "${GITHUB_OUTPUT}"
 
   format:
@@ -133,6 +135,51 @@ jobs:
 
       - name: Compile the firmware
         run: esphome compile "${EXAMPLE}"
+
+  # Built for the host by ESPHome and run with GoogleTest, with AddressSanitizer and UndefinedBehaviorSanitizer. Every
+  # line of the component must run (the branches the sanitizers add cannot all be taken)
+  cpp-tests:
+    name: Run the C++ tests
+    needs: changes
+    if: needs.changes.outputs.cpp-tests == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: .github/requirements-ci.txt
+
+      - name: Install ESPHome and gcovr
+        run: pip install -c "${REQUIREMENTS}" esphome gcovr
+
+      - name: Run the tests
+        run: tests/cpp/run.sh --fail-under-line 100
+
+  # ESPHome validates configurations and generates their code in the test process. Every line and branch of the
+  # component must run
+  python-tests:
+    name: Run the Python tests
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: .github/requirements-ci.txt
+
+      - name: Install ESPHome and pytest
+        run: pip install -c "${REQUIREMENTS}" esphome pytest pytest-cov
+
+      # Configured in pyproject.toml
+      - name: Run the tests
+        run: pytest --cov-fail-under=100
 
   # Every combination of the optional parts of the component on ESP8266, the full configuration on the other platforms.
   # The toolchains are downloaded at each run: ESPHome keeps them in ~/.cache/esphome, several GB for ESP32

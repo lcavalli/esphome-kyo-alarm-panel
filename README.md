@@ -345,7 +345,7 @@ ESPHome and the tools of the CI checks, at the same versions, in a virtual envir
 
 ```sh
 python3 -m venv .venv
-.venv/bin/pip install -c .github/requirements-ci.txt esphome clang-format ruff
+.venv/bin/pip install -c .github/requirements-ci.txt esphome clang-format ruff gcovr pytest pytest-cov
 ```
 
 Then, with `.venv/bin` in the `PATH` (`source .venv/bin/activate`):
@@ -364,6 +364,29 @@ default):
 esphome compile tests/minimal.yaml
 esphome -s platform esp32-idf compile tests/full.yaml
 ```
+
+### Unit tests
+
+The CI requires every line of the component to be run by the unit tests:
+
+- `tests/cpp/`: the C++ code, with [GoogleTest](https://google.github.io/googletest/). ESPHome builds the tests for
+  the host, with AddressSanitizer and UndefinedBehaviorSanitizer (on Fedora, install `libasan`). A simulated panel
+  answers on the UART from its memory, and the tests set the time returned by `millis()`. The coverage is
+  reported with [gcovr](https://gcovr.com/), extra arguments are passed to it:
+
+  ```sh
+  tests/cpp/run.sh --fail-under-line 100
+  tests/cpp/run.sh --html-details .esphome/coverage.html   # line by line, in tests/cpp/.esphome/
+  ```
+
+  Branch coverage is lower than 100%: the sanitizers add branches that cannot be taken, and some checks of the
+  component never fail (e.g. a request always has a callback).
+- `tests/python/`: the validation of the configuration and the generated code, with pytest. ESPHome runs in the test
+  process on small configurations for the host:
+
+  ```sh
+  pytest --cov-fail-under=100
+  ```
 
 ## Comparison with ESPKyoGate
 

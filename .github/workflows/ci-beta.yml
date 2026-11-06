@@ -1,14 +1,15 @@
 name: CI with the next ESPHome
 
 # Compiles the example and part of the tests with the beta and dev releases of ESPHome, to find incompatibilities
-# before they reach a stable release. Not a required check: a failure only marks the run as failed
+# before they reach a stable release. Not a required check: a failure only marks the run as failed. The unit tests run
+# only with the ESPHome version of the CI: they check generated code and ESPHome internals that change between versions
 on:
   schedule:
     - cron: "23 4 * * *"
-  # Changes to this workflow and to the tests are tested in their pull request
+  # Changes to this workflow and to the test configurations are tested in their pull request
   pull_request:
     branches: [main]
-    paths: [.github/workflows/ci-beta.yml, tests/**]
+    paths: [.github/workflows/ci-beta.yml, "tests/*.yaml", tests/platforms/**]
   workflow_dispatch:
 
 permissions:
