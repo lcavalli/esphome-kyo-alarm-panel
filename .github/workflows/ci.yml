@@ -114,17 +114,10 @@ jobs:
           cache: pip
           cache-dependency-path: .github/requirements-ci.txt
 
+      # No cache for the toolchains: ESPHome keeps them in ~/.cache/esphome, not in ~/.platformio, whose cache was a few
+      # KiB. The whole job, downloads included, takes about a minute
       - name: Install ESPHome
-        id: esphome
-        run: |
-          pip install -c "${REQUIREMENTS}" esphome
-          echo "version=$(python -c 'import esphome.const; print(esphome.const.__version__)')" >> "$GITHUB_OUTPUT"
-
-      - name: Cache PlatformIO
-        uses: actions/cache@v6
-        with:
-          path: ~/.platformio
-          key: platformio-${{ runner.os }}-esphome-${{ steps.esphome.outputs.version }}
+        run: pip install -c "${REQUIREMENTS}" esphome
 
       # The real secrets.yaml is not in the repository
       - name: Create dummy secrets
