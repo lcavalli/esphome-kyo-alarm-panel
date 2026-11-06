@@ -699,19 +699,18 @@ void KyoAlarmComponent::publish_event_() {
 #endif
 
 void KyoAlarmComponent::set_online_(bool online) {
-  // Before the online check, so that the warning is also set when the panel has not answered since boot. Setting the
-  // warning logs it, clearing it does not
+  // The first call always goes through, so that the communication binary sensor turns off and the warning is set also
+  // when the panel has not answered since boot
+  if (this->online_reported_ && this->status_.online == online)
+    return;
+  this->online_reported_ = true;
+  this->status_.online = online;
   if (online) {
+    ESP_LOGI(TAG, "Panel online");
     this->status_clear_warning();
   } else {
+    // Setting the warning logs it
     this->status_set_warning(LOG_STR("Panel not responding"));
-  }
-  if (this->status_.online == online)
-    return;
-  if (online)
-    ESP_LOGI(TAG, "Panel online");
-  this->status_.online = online;
-  if (!online) {
     // The last status read is stale: it is reported as unknown until the next poll. The panel may also have been
     // restarted or reprogrammed, so model and partitions are read again once it answers
     this->status_.realtime_valid = false;
