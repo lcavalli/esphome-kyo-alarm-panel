@@ -70,8 +70,18 @@ class Generated:
     defines: str
 
     def calls(self, variable: str) -> list[str]:
-        """The statements of main.cpp that call a method of `variable`, e.g. ['set_model("KYO32G", 32)']."""
-        return re.findall(rf"^  {re.escape(variable)}->(.*);$", self.main, re.MULTILINE)
+        """The statements of main.cpp that call a method of `variable`, e.g. ['set_model("KYO32G", 32)'].
+
+        A statement over several lines, such as a call with a lambda, is joined into one line.
+        """
+        # A statement starts with two spaces of indentation and goes on with the lines indented further, up to the
+        # closing brace of a lambda, which has the indentation of the statement
+        statements = re.findall(
+            rf"^  {re.escape(variable)}->(.*(?:\n(?:   |  \}}).*)*);$",
+            self.main,
+            re.MULTILINE,
+        )
+        return [" ".join(line.strip() for line in s.splitlines()) for s in statements]
 
 
 class ESPHome:

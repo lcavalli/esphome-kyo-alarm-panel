@@ -35,7 +35,10 @@ kyo_alarm:
         'set_model("KYO32G", 32)',
         "set_time(host_time)",
         "set_clock_max_drift(60)",
-        "add_on_event_callback(TriggerForwarder<const kyo_alarm::KyoEvent &>{automation_id})",
+        (
+            "add_on_event_callback([](const kyo_alarm::KyoEvent & event) -> void {"
+            " esphome__lambdaaction_id__fn(event); })"
+        ),
     ]
     assert "#define USE_KYO_ALARM_EVENT_LOG" in generated.defines
     assert "#define USE_KYO_ALARM_EVENT_LANGUAGE_IT" in generated.defines
