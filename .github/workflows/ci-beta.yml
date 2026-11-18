@@ -1,8 +1,9 @@
 name: CI with the next ESPHome
 
 # Compiles the example and part of the tests with the beta and dev releases of ESPHome, to find incompatibilities
-# before they reach a stable release. Not a required check: a failure only marks the run as failed. The unit tests run
-# only with the ESPHome version of the CI: they check generated code and ESPHome internals that change between versions
+# before they reach a stable release. Not a required check: a failure of a scheduled or manual run opens an issue for
+# its channel, closed by the first run that passes again. The unit tests run only with the ESPHome version of the CI:
+# they check generated code and ESPHome internals that change between versions
 on:
   schedule:
     - cron: "23 4 * * *"
@@ -26,6 +27,10 @@ jobs:
   example:
     name: Validate and compile the example with ESPHome ${{ matrix.channel }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # To open and close the issue of the channel
+      issues: write
     strategy:
       # A broken dev release must not stop the beta build
       fail-fast: false
@@ -40,6 +45,7 @@ jobs:
 
       # No cache for the toolchains, see example.yml
       - name: Install ESPHome
+        id: esphome
         env:
           CHANNEL: ${{ matrix.channel }}
         run: |
@@ -52,8 +58,9 @@ jobs:
             pip install --pre --no-deps esphome
             pip install "esphome==$(pip show esphome | sed -n 's/^Version: //p')"
           fi
-          # The version under test, in the log
+          # The version under test, in the log and in the issue
           esphome version
+          echo "version=$(pip show esphome | sed -n 's/^Version: //p')" >> "${GITHUB_OUTPUT}"
 
       # The real secrets.yaml is not in the repository
       - name: Create dummy secrets
@@ -78,3 +85,37 @@ jobs:
             esphome -s platform "${test%%:*}" compile "tests/${test#*:}.yaml"
             echo "::endgroup::"
           done
+
+      # One open issue per channel: a failure opens it if there is none, the first run that passes closes it. A pull
+      # request only tests the changes to the workflow and the tests, and a cancelled run reports nothing
+      - name: Open or close the issue of the channel
+        if: github.event_name != 'pull_request' && !cancelled()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          CHANNEL: ${{ matrix.channel }}
+          VERSION: ${{ steps.esphome.outputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # The status of the steps before this one
+          STATUS: ${{ job.status }}
+        run: |
+          # A failed issue list must fail the step, not open a duplicate
+          set -o pipefail
+          title="The component does not compile with ESPHome ${CHANNEL}"
+          # The issue list, not the search: the search index can lag behind a new issue
+          issue=$(gh issue list --state open --limit 200 --json number,title |
+            jq -r --arg title "${title}" 'map(select(.title == $title)) | .[0].number // empty')
+          if [[ "${STATUS}" == success ]]; then
+            if [[ -n "${issue}" ]]; then
+              gh issue close "${issue}" --comment "Passes again with ESPHome ${VERSION}: ${RUN_URL}"
+            fi
+          elif [[ -n "${issue}" ]]; then
+            echo "Still failing, issue #${issue} is already open"
+          else
+            gh issue create --label bug --title "${title}" --body-file - <<EOF
+          The check against the ESPHome ${CHANNEL} channel (${VERSION:-version unknown}) failed: ${RUN_URL}
+
+          It may be a breaking change in ESPHome or a broken ${CHANNEL} build. The first run that passes again closes
+          this issue.
+          EOF
+          fi
