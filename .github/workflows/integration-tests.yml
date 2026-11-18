@@ -1,0 +1,59 @@
+name: Integration tests
+
+# Runs the integration tests in tests/integration: the firmware runs on the host against a simulated panel, connected
+# with a TCP socket in place of the UART, and the tests read and control its entities through the native API.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned versions of the tools, updated by Dependabot
+  REQUIREMENTS: .github/requirements-ci.txt
+
+jobs:
+  # The check runs only if the files it covers changed, see .github/actions/changed-files
+  changes:
+    name: Find the changed files
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.changes.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: changes
+        uses: ./.github/actions/changed-files
+        with:
+          files: '^components/|^tests/integration/'
+
+  test:
+    name: Run the integration tests
+    needs: changes
+    if: needs.changes.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: .github/requirements-ci.txt
+
+      - name: Install ESPHome and pytest
+        run: pip install -c "${REQUIREMENTS}" esphome pytest
+
+      # tests/integration/pytest.ini, not the options of the unit tests in pyproject.toml
+      - name: Run the tests
+        run: pytest tests/integration
