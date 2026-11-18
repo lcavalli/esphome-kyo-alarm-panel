@@ -1,0 +1,58 @@
+# Firmware of the integration tests: the component runs on the host, its UART is a TCP connection to the simulated
+# panel of panel.py (tcp_uart client), its entities are read and controlled through the native API as Home Assistant
+# does. The tests compile it with free ports, see conftest.py
+substitutions:
+  api_port: "6053"
+  panel_port: "7000"
+
+esphome:
+  name: kyo-integration
+
+host:
+
+logger:
+  level: DEBUG
+
+api:
+  port: ${api_port}
+
+external_components:
+  - source: ../../components
+
+tcp_uart:
+  - id: panel_link
+    host: 127.0.0.1
+    port: ${panel_port}
+    # The tests start and stop the panel
+    reconnect_interval: 200ms
+    baud_rate: 9600
+    parity: EVEN
+
+kyo_alarm:
+  id: kyo
+  uart_id: panel_link
+
+alarm_control_panel:
+  - platform: kyo_alarm
+    name: Alarm
+    partitions:
+      away: [1, 2]
+      home: [1]
+    requires_code: true
+    requires_code_to_arm: true
+
+binary_sensor:
+  - platform: kyo_alarm
+    communication:
+      name: Communication
+    zones:
+      - zone: 1
+        sensor:
+          name: Zone 1
+
+switch:
+  - platform: kyo_alarm
+    zones:
+      - zone: 1
+        bypass:
+          name: Zone 1 bypass

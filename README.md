@@ -388,6 +388,17 @@ The CI requires every line of the component to be run by the unit tests:
   pytest --cov-fail-under=100
   ```
 
+### Integration tests
+
+`tests/integration/` runs the firmware on the host against a simulated panel, with pytest. The UART of the component is
+a TCP connection to the simulated panel ([`tcp_uart`](https://esphome.io/components/tcp_uart/)), and the tests read and
+control the entities through the native API, as Home Assistant does: e.g. the panel switched off at boot, or a command
+with a wrong code. The firmware is compiled once per run:
+
+```sh
+pytest tests/integration
+```
+
 ## Comparison with ESPKyoGate
 
 [ESPKyoGate](https://github.com/lorenzo-deluca/espkyogate) by Lorenzo De Luca is another awesome ESPHome component for
