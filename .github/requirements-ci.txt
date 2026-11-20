@@ -4,7 +4,7 @@
 esphome==2026.11.0
 # Different major versions may format differently, keep it in sync with the one used to format locally
 clang-format==23.1.5
-ruff==0.17.4
+ruff==0.17.5
 # Unit tests and their coverage
 gcovr==8.8
 pytest==9.2.0
