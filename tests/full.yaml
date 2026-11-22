@@ -41,6 +41,9 @@ kyo_alarm:
     clock_max_drift: 1min
     language: it
     update_interval: 2s
+    passthrough:
+      id: kyo_passthrough
+      idle_timeout: 1h
     on_event:
       - homeassistant.event:
           event: esphome.kyo_alarm_event
@@ -53,6 +56,13 @@ kyo_alarm:
   - id: kyo_2
     uart_id: uart_2
     language: it
+
+uart_tcp:
+  - role: server
+    uart_id: kyo_passthrough
+    port: 5000
+    allowed_ips:
+      - 192.168.1.10
 
 alarm_control_panel:
   - platform: kyo_alarm
@@ -126,6 +136,8 @@ binary_sensor:
 switch:
   - platform: kyo_alarm
     kyo_alarm_id: kyo_1
+    passthrough:
+      name: Passthrough
     zones:
       - zone: 1
         bypass:

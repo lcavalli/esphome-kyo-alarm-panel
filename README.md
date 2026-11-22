@@ -21,6 +21,9 @@ following the design and directions of the author.
   the hub as `KyoAlarmListener`s and receive every status update; those that act on the panel (alarm control
   panel, bypass switches, buttons) do it through the hub. Each platform's code lives in its own
   directory and is only compiled when the platform is used.
+- `KyoPassthroughPort` (`kyo_passthrough.*`, compiled only with `passthrough`) is a UART on top of the hub one,
+  forwarded to it while the hub is in passthrough mode: another UART component, such as `uart_tcp`, uses it as
+  its bus.
 - `kyo_protocol.*` holds the frame encoding, independent of ESPHome.
 
 ## Configuration
@@ -120,6 +123,7 @@ one `kyo_alarm` hub, set `kyo_alarm_id` on each platform.
 | `clock_max_drift` | At every time sync the panel clock is read, and set only when it differs from the time source by more than this, default `30s`, from `5s` to `30min`. DST changes are corrected the same way; failed reads and writes are retried on the next time sync. |
 | `language` | Language of the event descriptions, `en` (default) or `it`, the same for all hubs. Only the texts of this language are compiled in. |
 | `on_event` | Automations run for each new event of the panel event log, see [Event log](#event-log). |
+| `passthrough` | A UART for the programming software of the panel, with `id` (required) and `idle_timeout` (default `30min`, from `1min` to `24h`), see [Passthrough](#passthrough-programming-software). |
 
 ### Platforms
 
@@ -127,7 +131,7 @@ one `kyo_alarm` hub, set `kyo_alarm_id` on each platform.
 | --- | --- |
 | `alarm_control_panel` | The panel entity, with `partitions` (`away`, `home`, `night`, `vacation`, see [Arming modes](#arming-modes)), `requires_code` and `requires_code_to_arm`. |
 | `binary_sensor` | `communication` (off after 3 failed requests, see [Communication loss](#communication-loss)); warnings `mains_failure`, `bpi_missing`, `fuse_fault`, `low_battery`, `phone_line_fault`, `default_codes`, `wireless_fault`; tampers `tamper_zone`, `tamper_false_key`, `tamper_bpi`, `tamper_system`, `tamper_rf_jam`, `tamper_wireless`; `zones`, a list of `zone` with `sensor`, `tamper`, `alarm_memory`, `tamper_memory`. |
-| `switch` | `zones`, a list of `zone` with `bypass`. |
+| `switch` | `passthrough`, turns the passthrough on and off (requires `passthrough` on the hub); `zones`, a list of `zone` with `bypass`. |
 | `button` | `reset_memory`, resets alarm and tamper memories; `sync_clock`, sets the panel clock from the time source now, regardless of `clock_max_drift` (requires `time_id` on the hub). |
 | `text_sensor` | `panel_model`, `firmware_version`; `partition_status`, the partitions armed with each arming type, see [Configuring the arming modes](#configuring-the-arming-modes); `last_event`, the last event of the panel event log, see [Event log](#event-log). |
 
@@ -339,6 +343,60 @@ Only reads of at most 64 bytes are allowed; writes and reads of the PIN table ar
 runs at a time. Failures (refused request, no reply, checksum mismatch) are returned as errors and logged
 with the bytes received.
 
+### Passthrough (programming software)
+
+The programming software of the panel needs the serial port the component uses. With `passthrough` the hub
+lends it: a [`uart_tcp`](https://esphome.io/components/uart_tcp/) server forwards the panel UART to a TCP
+client, and a virtual serial port on the PC connects the software to it. The traffic is logged, to find out how
+the software does what the component does not do yet.
+
+```yaml
+kyo_alarm:
+  id: kyo
+  uart_id: uart_bus        # required: the passthrough port is a UART too
+  passthrough:
+    id: kyo_passthrough
+    idle_timeout: 30min
+
+uart_tcp:
+  - role: server
+    uart_id: kyo_passthrough
+    port: 5000
+    allowed_ips:
+      - 192.168.1.10       # the PC of the programming software
+
+switch:
+  - platform: kyo_alarm
+    passthrough:
+      name: "Passthrough"
+```
+
+When the switch turns on, the hub stops polling, refuses commands and raw reads, and waits for the requests in
+progress (a write session is always closed). Then it forwards the bytes both ways, and Home Assistant sees a
+lost communication (see [Communication loss](#communication-loss)), with `Passthrough on` as the warning
+status. The client bytes are dropped while the switch is off. The switch turns off by itself after
+`idle_timeout` without traffic, and it is off at boot. Once it is off, the hub reads panel model and partitions
+again, as they may have been reprogrammed.
+
+The passthrough port declares a UART: components that pick the only UART of the device by default, `kyo_alarm`
+included, need their `uart_id`.
+
+On the PC, the software needs a serial port connected to `<device IP>:5000` with a raw TCP connection (no
+RFC 2217, no control lines), e.g.:
+
+- Windows: a [com0com](https://com0com.sourceforge.net/) pair of virtual ports, the software on one of them
+  and `com2tcp` (from the same project) on the other, connected to the device;
+- a Windows virtual machine in VirtualBox: a serial port of the virtual machine in `TCP` mode, connecting to
+  `<device IP>:5000` (*Connect to existing pipe/socket*), no software needed in the guest.
+
+**Security.** While the switch is on, any client the `uart_tcp` server accepts has the access of the installer
+to the panel, without a password: restrict it with `allowed_ips`, and keep the switch for administrators
+(`entity_category: config` by default; it can also be `internal`).
+
+**Traffic log.** At the `VERBOSE` log level the hub logs the bytes it forwards, a line per frame, e.g.
+`Passthrough client > panel: F0 00 00 0B 00 FB`. The programming software reads and writes the PINs and the
+other codes of the panel, which end up in the log: enable it only while needed.
+
 ## Development
 
 ESPHome and the tools of the CI checks, at the same versions, in a virtual environment:
@@ -393,7 +451,8 @@ The CI requires every line of the component to be run by the unit tests:
 `tests/integration/` runs the firmware on the host against a simulated panel, with pytest. The UART of the component is
 a TCP connection to the simulated panel ([`tcp_uart`](https://esphome.io/components/tcp_uart/)), and the tests read and
 control the entities through the native API, as Home Assistant does: e.g. the panel switched off at boot, or a command
-with a wrong code. The firmware is compiled once per run:
+with a wrong code. Its passthrough port is a [`uart_tcp`](https://esphome.io/components/uart_tcp/) server, which the
+tests connect to as the programming software would. The firmware is compiled once per run:
 
 ```sh
 pytest tests/integration

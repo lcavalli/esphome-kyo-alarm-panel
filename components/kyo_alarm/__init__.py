@@ -2,7 +2,7 @@ from esphome import automation
 import esphome.codegen as cg
 from esphome.components import time, uart
 import esphome.config_validation as cv
-from esphome.const import CONF_ID, CONF_MODEL, CONF_TIME_ID
+from esphome.const import CONF_ID, CONF_MODEL, CONF_TIME_ID, CONF_UART_ID
 import esphome.final_validate as fv
 
 CODEOWNERS = ["@lcavalli"]
@@ -10,9 +10,11 @@ DEPENDENCIES = ["uart"]
 MULTI_CONF = True
 
 CONF_CLOCK_MAX_DRIFT = "clock_max_drift"
+CONF_IDLE_TIMEOUT = "idle_timeout"
 CONF_KYO_ALARM_ID = "kyo_alarm_id"
 CONF_LANGUAGE = "language"
 CONF_ON_EVENT = "on_event"
+CONF_PASSTHROUGH = "passthrough"
 CONF_REQUEST = "request"
 CONF_ZONE = "zone"
 CONF_ZONES = "zones"
@@ -22,6 +24,7 @@ KyoAlarmComponent = kyo_alarm_ns.class_(
     "KyoAlarmComponent", cg.PollingComponent, uart.UARTDevice
 )
 KyoAlarmListener = kyo_alarm_ns.class_("KyoAlarmListener")
+KyoPassthroughPort = kyo_alarm_ns.class_("KyoPassthroughPort", uart.UARTComponent)
 StatusField = kyo_alarm_ns.enum("StatusField", is_class=True)
 ReadRawAction = kyo_alarm_ns.class_("ReadRawAction", automation.Action)
 KyoEvent = kyo_alarm_ns.struct("KyoEvent")
@@ -100,6 +103,18 @@ CONFIG_SCHEMA = cv.All(
             # Only the texts of one language are compiled in, so it is the same for all hubs
             cv.Optional(CONF_LANGUAGE, default="en"): cv.one_of(*LANGUAGES, lower=True),
             cv.Optional(CONF_ON_EVENT): automation.validate_automation({}),
+            # A UART for another program, e.g. the programming software of the panel through a uart_tcp server
+            cv.Optional(CONF_PASSTHROUGH): cv.Schema(
+                {
+                    cv.Required(CONF_ID): cv.declare_id(KyoPassthroughPort),
+                    cv.Optional(CONF_IDLE_TIMEOUT, default="30min"): cv.All(
+                        cv.positive_time_period_milliseconds,
+                        cv.Range(
+                            min=cv.TimePeriod(minutes=1), max=cv.TimePeriod(hours=24)
+                        ),
+                    ),
+                }
+            ),
         }
     )
     .extend(cv.polling_component_schema("1s"))
@@ -109,7 +124,7 @@ CONFIG_SCHEMA = cv.All(
     cv.require_esphome_version(2026, 10, 0),
 )
 
-FINAL_VALIDATE_SCHEMA = uart.final_validate_device_schema(
+_final_validate_uart = uart.final_validate_device_schema(
     "kyo_alarm",
     baud_rate=9600,
     require_tx=True,
@@ -118,6 +133,20 @@ FINAL_VALIDATE_SCHEMA = uart.final_validate_device_schema(
     parity="EVEN",
     stop_bits=1,
 )
+
+
+def final_validate(config):
+    uart_id = str(config[CONF_UART_ID])
+    for hub in fv.full_config.get().get("kyo_alarm", []):
+        if CONF_PASSTHROUGH in hub and str(hub[CONF_PASSTHROUGH][CONF_ID]) == uart_id:
+            raise cv.Invalid(
+                f"'{uart_id}' is the passthrough port of a kyo_alarm hub, not the UART of a panel",
+                path=[CONF_UART_ID],
+            )
+    return _final_validate_uart(config)
+
+
+FINAL_VALIDATE_SCHEMA = final_validate
 
 
 async def to_code(config):
@@ -134,6 +163,11 @@ async def to_code(config):
 
     if config[CONF_LANGUAGE] == "it":
         cg.add_define("USE_KYO_ALARM_EVENT_LANGUAGE_IT")
+    if passthrough := config.get(CONF_PASSTHROUGH):
+        cg.add_define("USE_KYO_ALARM_PASSTHROUGH")
+        port = cg.new_Pvariable(passthrough[CONF_ID], var)
+        cg.add(var.set_passthrough_port(port))
+        cg.add(var.set_passthrough_idle_timeout(passthrough[CONF_IDLE_TIMEOUT]))
     if on_event := config.get(CONF_ON_EVENT):
         enable_event_log()
         for conf in on_event:

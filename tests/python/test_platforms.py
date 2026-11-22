@@ -118,6 +118,38 @@ switch:
     assert "register_listener(bypass_32)" in generated.calls("kyo")
 
 
+def test_passthrough_switch(esphome):
+    generated = esphome.generate(
+        """
+kyo_alarm:
+  id: kyo
+  uart_id: uart_bus
+  passthrough:
+    id: kyo_passthrough
+
+switch:
+  - platform: kyo_alarm
+    passthrough:
+      id: passthrough
+      name: Passthrough
+"""
+    )
+    assert "new(passthrough) kyo_alarm::KyoPassthroughSwitch();" in generated.main
+    assert "set_parent(kyo)" in generated.calls("passthrough")
+    # Always off at boot, the state comes from the hub
+    assert "set_restore_mode(switch_::SWITCH_RESTORE_DISABLED)" in generated.calls(
+        "passthrough"
+    )
+    assert "register_listener(passthrough)" in generated.calls("kyo")
+
+
+def test_passthrough_switch_needs_a_port(esphome):
+    output = esphome.invalid(
+        "kyo_alarm:\n\nswitch:\n  - platform: kyo_alarm\n    passthrough:\n      name: Passthrough\n"
+    )
+    assert "'passthrough' requires 'passthrough' on the kyo_alarm hub" in output
+
+
 def test_buttons(esphome):
     generated = esphome.generate(
         TIME

@@ -113,3 +113,62 @@ script:
         "kyo_alarm_readrawaction_id_2->set_request([](std::string request) -> std::string {"
         in generated.main
     )
+
+
+# A hub with a passthrough port, forwarded by a uart_tcp server
+PASSTHROUGH = """
+kyo_alarm:
+  id: kyo
+  uart_id: uart_bus
+  passthrough:
+    id: kyo_passthrough
+
+uart_tcp:
+  - role: server
+    uart_id: kyo_passthrough
+    port: 5000
+"""
+
+
+def test_passthrough(esphome):
+    generated = esphome.generate(PASSTHROUGH)
+    assert "new(kyo_passthrough) kyo_alarm::KyoPassthroughPort(kyo);" in generated.main
+    calls = generated.calls("kyo")
+    assert "set_passthrough_port(kyo_passthrough)" in calls
+    assert "set_passthrough_idle_timeout(1800000)" in calls
+    assert "#define USE_KYO_ALARM_PASSTHROUGH" in generated.defines
+    assert "USE_KYO_ALARM_PASSTHROUGH" not in esphome.generate("kyo_alarm:\n").defines
+
+
+def test_passthrough_idle_timeout(esphome):
+    generated = esphome.generate(
+        "kyo_alarm:\n  id: kyo\n  uart_id: uart_bus\n  passthrough:\n"
+        "    id: kyo_passthrough\n    idle_timeout: 2h\n"
+    )
+    assert "set_passthrough_idle_timeout(7200000)" in generated.calls("kyo")
+
+
+def test_invalid_passthrough(esphome):
+    hub = "kyo_alarm:\n  uart_id: uart_bus\n  passthrough:\n"
+    assert "'id' is a required option for [passthrough]" in esphome.invalid(
+        hub + "    idle_timeout: 1h\n"
+    )
+    port = hub + "    id: kyo_passthrough\n"
+    assert "must be at least 1min" in esphome.invalid(port + "    idle_timeout: 59s\n")
+    assert "must be at most 24h" in esphome.invalid(port + "    idle_timeout: 25h\n")
+    # The UART of a hub cannot be a passthrough port, its own or of another hub
+    output = esphome.invalid(
+        """
+kyo_alarm:
+  - id: kyo_1
+    uart_id: uart_bus
+    passthrough:
+      id: kyo_passthrough
+  - id: kyo_2
+    uart_id: kyo_passthrough
+"""
+    )
+    assert (
+        "'kyo_passthrough' is the passthrough port of a kyo_alarm hub, not the UART of a panel"
+        in output
+    )

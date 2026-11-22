@@ -1,9 +1,11 @@
 # Firmware of the integration tests: the component runs on the host, its UART is a TCP connection to the simulated
 # panel of panel.py (tcp_uart client), its entities are read and controlled through the native API as Home Assistant
-# does. The tests compile it with free ports, see conftest.py
+# does. Its passthrough port is a TCP server (uart_tcp), for the tests in the role of the programming software. The
+# tests compile it with free ports, see conftest.py
 substitutions:
   api_port: "6053"
   panel_port: "7000"
+  passthrough_port: "7001"
 
 esphome:
   name: kyo-integration
@@ -11,7 +13,8 @@ esphome:
 host:
 
 logger:
-  level: DEBUG
+  # The bytes forwarded by the passthrough
+  level: VERBOSE
 
 api:
   port: ${api_port}
@@ -31,6 +34,14 @@ tcp_uart:
 kyo_alarm:
   id: kyo
   uart_id: panel_link
+  passthrough:
+    id: kyo_passthrough
+    idle_timeout: 1min
+
+uart_tcp:
+  - role: server
+    uart_id: kyo_passthrough
+    port: ${passthrough_port}
 
 alarm_control_panel:
   - platform: kyo_alarm
@@ -52,6 +63,8 @@ binary_sensor:
 
 switch:
   - platform: kyo_alarm
+    passthrough:
+      name: Passthrough
     zones:
       - zone: 1
         bypass:

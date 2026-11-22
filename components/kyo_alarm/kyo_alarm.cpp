@@ -26,6 +26,11 @@ static const uint16_t RESET_TIMEOUT_MS = 500;
 static const uint16_t REQUEST_GAP_MS = 50;
 /// Consecutive failed requests before the panel is reported offline
 static const uint8_t MAX_FAILURES = 3;
+#ifdef USE_KYO_ALARM_PASSTHROUGH
+/// Bytes forwarded in the same direction after this pause are logged as a new frame. Requests are sent at least 50 ms
+/// apart (REQUEST_GAP_MS), a reply arrives without pauses
+static const uint32_t TRAFFIC_FRAME_GAP_MS = 50;
+#endif
 
 optional<uint32_t> KyoAlarmStatus::get(StatusField field) const {
   switch (field) {
@@ -80,13 +85,17 @@ void KyoAlarmComponent::dump_config() {
     ESP_LOGCONFIG(TAG, "  Panel clock synchronized with time source when off by more than %" PRIu32 "s",
                   this->clock_max_drift_);
 #endif
+#ifdef USE_KYO_ALARM_PASSTHROUGH
+  if (this->passthrough_port_ != nullptr)
+    ESP_LOGCONFIG(TAG, "  Passthrough idle timeout: %" PRIu32 "s", this->passthrough_idle_timeout_ / 1000);
+#endif
   for (auto *listener : this->listeners_)
     listener->dump_config();
 }
 
 void KyoAlarmComponent::update() {
   // Status polls are low priority: skip this cycle if there are commands in flight
-  if (this->busy_ || this->queue_count_ > 0)
+  if (this->busy_ || this->queue_count_ > 0 || this->status_.passthrough)
     return;
 
   switch (this->phase_) {
@@ -119,8 +128,21 @@ void KyoAlarmComponent::update() {
 }
 
 void KyoAlarmComponent::loop() {
+#ifdef USE_KYO_ALARM_PASSTHROUGH
+  if (this->passthrough_active_) {
+    this->loop_passthrough_();
+    return;
+  }
+#endif
   if (!this->busy_) {
     if (this->queue_count_ == 0) {
+#ifdef USE_KYO_ALARM_PASSTHROUGH
+      // The requests made before the passthrough was turned on are done
+      if (this->status_.passthrough) {
+        this->start_passthrough_();
+        return;
+      }
+#endif
       this->disable_loop();
     } else if (millis() - this->completed_at_ >= REQUEST_GAP_MS) {
       this->start_request_();
@@ -295,6 +317,8 @@ void KyoAlarmComponent::read_raw(const std::string &request, ResultCallback &&ca
   const char *error = nullptr;
   if (this->raw_pending_) {
     error = "Another raw read is in progress";
+  } else if (this->status_.passthrough) {
+    error = "Passthrough on";
   } else if (size < KYO_HEADER_SIZE - 1) {
     error = "Expected a read request header in hex, e.g. F0 00 00 0B 00";
   } else if (header[0] != KYO_OP_READ) {
@@ -397,8 +421,16 @@ void KyoAlarmComponent::enqueue_write_(uint16_t address, const uint8_t *data, ui
 }
 
 bool KyoAlarmComponent::push_back_(Request &&request) {
-  if (this->queue_count_ == QUEUE_SIZE) {
-    ESP_LOGW(TAG, "Request queue full, request dropped");
+  // New requests are refused while the passthrough is on. Requests pushed in front continue one in progress (a close
+  // after a write, the second half of the PIN table, the names of the events): they run before the passthrough starts
+  const char *refused = nullptr;
+  if (this->status_.passthrough) {
+    refused = "Passthrough on";
+  } else if (this->queue_count_ == QUEUE_SIZE) {
+    refused = "Request queue full";
+  }
+  if (refused != nullptr) {
+    ESP_LOGW(TAG, "%s, request dropped", refused);
     if (request.callback)
       request.callback(false, nullptr);
     return false;
@@ -724,5 +756,120 @@ void KyoAlarmComponent::notify_listeners_() {
   for (auto *listener : this->listeners_)
     listener->on_status_update(this->status_);
 }
+
+#ifdef USE_KYO_ALARM_PASSTHROUGH
+void KyoAlarmComponent::set_passthrough(bool enable) {
+  if (this->passthrough_port_ == nullptr) {
+    ESP_LOGW(TAG, "No passthrough port configured");
+    return;
+  }
+  if (enable == this->status_.passthrough)
+    return;
+  if (enable) {
+    ESP_LOGI(TAG, "Passthrough on, waiting for the requests in progress");
+    this->status_.passthrough = true;
+    this->enable_loop();
+  } else {
+    this->stop_passthrough_();
+  }
+  this->notify_listeners_();
+}
+
+void KyoAlarmComponent::start_passthrough_() {
+  // Bytes received after the last request, for no one
+  uint8_t byte;
+  while (this->available() > 0 && this->read_byte(&byte)) {
+  }
+  this->passthrough_active_ = true;
+  this->passthrough_traffic_at_ = millis();
+  // As for a lost communication, without retries: the status is unknown until the next poll, and model and partitions
+  // are read again, as the panel may be reprogrammed meanwhile
+  this->status_.online = false;
+  this->status_.realtime_valid = false;
+  this->status_.status_valid = false;
+  this->phase_ = Phase::READ_PANEL_INFO;
+  this->failures_ = 0;
+  this->status_set_warning(LOG_STR("Passthrough on"));
+  ESP_LOGI(TAG, "Passthrough started, the panel UART is forwarded to the passthrough port");
+  this->notify_listeners_();
+}
+
+void KyoAlarmComponent::stop_passthrough_() {
+  this->status_.passthrough = false;
+  if (!this->passthrough_active_) {
+    ESP_LOGI(TAG, "Passthrough off before it started");
+    return;
+  }
+  this->passthrough_active_ = false;
+#if ESPHOME_LOG_LEVEL >= ESPHOME_LOG_LEVEL_VERBOSE
+  this->flush_traffic_log_();
+#endif
+  ESP_LOGI(TAG, "Passthrough off, polling the panel again");
+  this->status_clear_warning();
+  // The first outcome of a request is always reported, setting the warning if the panel does not answer
+  this->online_reported_ = false;
+  // The panel ignores a request sent right after its previous reply, which may have been for the passthrough client
+  this->completed_at_ = millis();
+  this->update();
+}
+
+void KyoAlarmComponent::loop_passthrough_() {
+  uint32_t now = millis();
+#if ESPHOME_LOG_LEVEL >= ESPHOME_LOG_LEVEL_VERBOSE
+  if (now - this->passthrough_traffic_at_ >= TRAFFIC_FRAME_GAP_MS)
+    this->flush_traffic_log_();
+#endif
+  if (now - this->passthrough_traffic_at_ >= this->passthrough_idle_timeout_) {
+    ESP_LOGI(TAG, "No passthrough traffic for %" PRIu32 "s", this->passthrough_idle_timeout_ / 1000);
+    this->set_passthrough(false);
+  }
+}
+
+void KyoAlarmComponent::passthrough_write_(const uint8_t *data, size_t len) {
+  if (!this->passthrough_active_) {
+    ESP_LOGV(TAG, "Passthrough not started, %u bytes for the panel dropped", unsigned(len));
+    return;
+  }
+#if ESPHOME_LOG_LEVEL >= ESPHOME_LOG_LEVEL_VERBOSE
+  this->log_traffic_(true, data, len);
+#endif
+  this->write_array(data, len);
+  this->passthrough_traffic_at_ = millis();
+}
+
+bool KyoAlarmComponent::passthrough_read_(uint8_t *data, size_t len) {
+  if (!this->passthrough_active_ || !this->read_array(data, len))
+    return false;
+#if ESPHOME_LOG_LEVEL >= ESPHOME_LOG_LEVEL_VERBOSE
+  this->log_traffic_(false, data, len);
+#endif
+  this->passthrough_traffic_at_ = millis();
+  return true;
+}
+
+#if ESPHOME_LOG_LEVEL >= ESPHOME_LOG_LEVEL_VERBOSE
+void KyoAlarmComponent::log_traffic_(bool to_panel, const uint8_t *data, size_t len) {
+  // Called before passthrough_traffic_at_ is updated: the time since the previous bytes
+  if (to_panel != this->traffic_to_panel_ || millis() - this->passthrough_traffic_at_ >= TRAFFIC_FRAME_GAP_MS)
+    this->flush_traffic_log_();
+  this->traffic_to_panel_ = to_panel;
+  for (size_t i = 0; i < len; i++) {
+    if (this->traffic_size_ == this->traffic_.size())
+      this->flush_traffic_log_();
+    this->traffic_[this->traffic_size_++] = data[i];
+  }
+}
+
+void KyoAlarmComponent::flush_traffic_log_() {
+  if (this->traffic_size_ == 0)
+    return;
+  // PINs included: logged only at the verbose level
+  char hex[format_hex_pretty_size(KYO_MAX_FRAME_SIZE)];
+  ESP_LOGV(TAG, "Passthrough %s: %s", this->traffic_to_panel_ ? "client > panel" : "panel > client",
+           format_hex_pretty_to(hex, this->traffic_.data(), this->traffic_size_, ' '));
+  this->traffic_size_ = 0;
+}
+#endif
+#endif
 
 }  // namespace esphome::kyo_alarm

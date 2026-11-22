@@ -35,7 +35,10 @@ time:
 
 kyo_alarm:
   id: kyo
+  uart_id: uart_bus
   time_id: host_time
+  passthrough:
+    id: kyo_passthrough
   on_event:
     - logger.log: event
 
@@ -50,6 +53,8 @@ binary_sensor:
 
 switch:
   - platform: kyo_alarm
+    passthrough:
+      name: Passthrough
     zones:
       - zone: 1
         bypass:
