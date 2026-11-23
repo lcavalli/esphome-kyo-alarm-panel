@@ -63,6 +63,7 @@ def pytest_pyfunc_call(pyfuncitem: pytest.Function) -> bool | None:
 class Firmware:
     api_port: int
     panel_port: int
+    passthrough_port: int
 
 
 def free_ports(count: int) -> list[int]:
@@ -80,7 +81,7 @@ def free_ports(count: int) -> list[int]:
 @pytest.fixture(scope="session")
 def firmware() -> Firmware:
     """The firmware, compiled with free ports: only its main.cpp is compiled again in the next sessions."""
-    api_port, panel_port = free_ports(2)
+    api_port, panel_port, passthrough_port = free_ports(3)
     subprocess.run(
         [
             sys.executable,
@@ -92,12 +93,15 @@ def firmware() -> Firmware:
             "-s",
             "panel_port",
             str(panel_port),
+            "-s",
+            "passthrough_port",
+            str(passthrough_port),
             "compile",
             str(CONFIG),
         ],
         check=True,
     )
-    return Firmware(api_port, panel_port)
+    return Firmware(api_port, panel_port, passthrough_port)
 
 
 class Device:

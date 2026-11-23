@@ -18,6 +18,7 @@
 #include "esphome/components/time/real_time_clock.h"
 #endif
 
+#include "kyo_passthrough.h"
 #include "kyo_protocol.h"
 
 namespace esphome::kyo_alarm {
@@ -40,6 +41,8 @@ struct KyoAlarmStatus {
   bool online{false};
   bool realtime_valid{false};
   bool status_valid{false};
+  /// Passthrough mode on: the hub does not poll the panel, see KyoAlarmComponent::set_passthrough()
+  bool passthrough{false};
 
   /// Partitions configured in the panel (bit 0 is partition 1)
   uint8_t partitions{0};
@@ -140,6 +143,10 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
   void set_time(time::RealTimeClock *time) { this->time_ = time; }
   void set_clock_max_drift(uint32_t max_drift_s) { this->clock_max_drift_ = max_drift_s; }
 #endif
+#ifdef USE_KYO_ALARM_PASSTHROUGH
+  void set_passthrough_port(KyoPassthroughPort *port) { this->passthrough_port_ = port; }
+  void set_passthrough_idle_timeout(uint32_t timeout_ms) { this->passthrough_idle_timeout_ = timeout_ms; }
+#endif
 
   const KyoAlarmStatus &get_status() const { return this->status_; }
   uint8_t get_max_zones() const { return this->max_zones_; }
@@ -172,7 +179,18 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
   /// Why the last raw read failed, empty if it succeeded.
   const std::string &get_raw_error() const { return this->raw_error_; }
 
+#ifdef USE_KYO_ALARM_PASSTHROUGH
+  /// Turn the passthrough mode on or off. When on, the hub stops polling and refuses commands; once the requests in
+  /// progress are done, the panel UART is forwarded to the passthrough port, as for a lost communication (status
+  /// unknown, panel model and partitions read again afterwards). It turns off by itself after the idle timeout.
+  void set_passthrough(bool enable);
+#endif
+
  protected:
+#ifdef USE_KYO_ALARM_PASSTHROUGH
+  friend class KyoPassthroughPort;
+#endif
+
   enum class Phase : uint8_t {
     READ_PANEL_INFO,
     READ_PARTITIONS,
@@ -216,6 +234,15 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
   void publish_event_();
 #endif
   void set_online_(bool online);
+#ifdef USE_KYO_ALARM_PASSTHROUGH
+  void start_passthrough_();
+  void stop_passthrough_();
+  void loop_passthrough_();
+  void passthrough_write_(const uint8_t *data, size_t len);
+  bool passthrough_read_(uint8_t *data, size_t len);
+  void log_traffic_(bool to_panel, const uint8_t *data, size_t len);
+  void flush_traffic_log_();
+#endif
 #ifdef USE_TIME
   void on_time_sync_();
   void handle_datetime_(const uint8_t *data);
@@ -271,6 +298,19 @@ class KyoAlarmComponent : public uart::UARTDevice, public PollingComponent {
   uint8_t events_index_{0};
   std::array<uint8_t, EVENTS_PER_READ * KYO_EVENT_SIZE> events_{};
   KyoEvent event_{};
+#endif
+
+#ifdef USE_KYO_ALARM_PASSTHROUGH
+  KyoPassthroughPort *passthrough_port_{nullptr};
+  uint32_t passthrough_idle_timeout_{0};
+  /// The panel UART is forwarded to the passthrough port
+  bool passthrough_active_{false};
+  /// Time of the last byte forwarded, either way
+  uint32_t passthrough_traffic_at_{0};
+  // Bytes forwarded and not logged yet, all in the same direction
+  std::array<uint8_t, KYO_MAX_FRAME_SIZE> traffic_{};
+  size_t traffic_size_{0};
+  bool traffic_to_panel_{false};
 #endif
 
   // Outcome of the last raw read
