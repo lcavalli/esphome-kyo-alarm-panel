@@ -384,10 +384,10 @@ included, need their `uart_id`.
 On the PC, the software needs a serial port connected to `<device IP>:5000` with a raw TCP connection (no
 RFC 2217, no control lines), e.g.:
 
-- Windows: a [com0com](https://com0com.sourceforge.net/) pair of virtual ports, the software on one of them
-  and `com2tcp` (from the same project) on the other, connected to the device;
-- a Windows virtual machine in VirtualBox: a serial port of the virtual machine in `TCP` mode, connecting to
-  `<device IP>:5000` (*Connect to existing pipe/socket*), no software needed in the guest.
+- a Windows virtual machine in VirtualBox (tested): a serial port of the virtual machine in `TCP` mode,
+  connecting to `<device IP>:5000` (*Connect to existing pipe/socket*), no software needed in the guest;
+- Windows (not tested): a [com0com](https://com0com.sourceforge.net/) pair of virtual ports, the software on one
+  of them and `com2tcp` (from the same project) on the other, connected to the device.
 
 **Security.** While the switch is on, any client the `uart_tcp` server accepts has the access of the installer
 to the panel, without a password: restrict it with `allowed_ips`, and keep the switch for administrators
