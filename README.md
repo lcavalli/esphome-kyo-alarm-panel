@@ -26,15 +26,44 @@ following the design and directions of the author.
   its bus.
 - `kyo_protocol.*` holds the frame encoding, independent of ESPHome.
 
+## Hardware
+
+The adapter between the panel and the ESP32 is powered by the panel. The component is used on an ESP8266 with an
+equivalent circuit; this ESP32 version has not been tried on a panel yet.
+
+![Circuit of the adapter: DC-DC converter, ESP32 DEVKIT V1 DOIT and MAX3232](images/circuit.png)
+
+- **Power supply** (left): a step-down DC-DC converter takes the +13.5 V of the panel and feeds the `VIN` pin of
+  the ESP32 board (5 V).
+- **ESP32** (center): an ESP32 DEVKIT V1 DOIT, 36-pin version (`esp32doit-devkit-v1` in ESPHome). The panel is on
+  UART 2, `GPIO17` (TX) and `GPIO16` (RX); UART 0 stays on the USB port, for flashing and logs.
+- **RS-232 interface** (right): a MAX3232 module, powered at 3.3 V by the `3V3` pin of the board, converts the
+  levels of the ESP32 to the RS-232 levels of the serial port of the panel. A MAX232 cannot be used: it needs 5 V,
+  and its outputs would exceed the 3.3 V tolerated by the ESP32 pins.
+
+| ESP32 pin | Connected to |
+| --- | --- |
+| `VIN` | DC-DC converter output, 5 V |
+| `GND` | Ground, common to the DC-DC converter, the MAX3232 and the panel |
+| `3V3` | MAX3232 `VCC` |
+| `GPIO17` (UART 2 TX) | MAX3232 `RX` (TTL input) |
+| `GPIO16` (UART 2 RX) | MAX3232 `TX` (TTL output) |
+
+The RS-232 side of the MAX3232 goes to the serial port of the panel.
+
 ## Configuration
 
-Requires ESPHome 2026.10.0 or later. The component is used on an ESP8266; the CI also compiles it for ESP32
-(ESP-IDF and Arduino), ESP32-C3, RP2040 and BK72xx, which have not been tried on a panel.
+Requires ESPHome 2026.10.0 or later. The examples are for the ESP32 DEVKIT V1 DOIT of the [adapter](#hardware).
+The component is used on an ESP8266; the CI also compiles it for ESP32 (ESP-IDF and Arduino), ESP32-C3, RP2040 and
+BK72xx, which have not been tried on a panel.
 
 ```yaml
+esp32:
+  board: esp32doit-devkit-v1
+
 uart:
-  tx_pin: GPIO5
-  rx_pin: GPIO4
+  tx_pin: GPIO17              # UART 2, see Hardware
+  rx_pin: GPIO16
   baud_rate: 9600
   data_bits: 8
   parity: EVEN
